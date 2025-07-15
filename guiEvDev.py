@@ -14,7 +14,8 @@ from select import select
 
 if __name__=='__main__':
 
-    device = evdev.InputDevice('/dev/input/event21')
+    print(evdev.list_devices())
+    device = evdev.InputDevice('/dev/input/event25')
     print("Using device:", device)
 
     cam = cv2.VideoCapture(0)
@@ -66,7 +67,7 @@ if __name__=='__main__':
         
         ret, frame = cam.read()
 
-        event, values = window.read(timeout=0.1)
+        event, values = window.read(timeout=0.01)
 
         if (event == sg.WIN_CLOSED):
             break
@@ -95,7 +96,8 @@ if __name__=='__main__':
         # Display the captured frame
         print(ID_list)
         print(len(ID_list))
-
+	
+        aCount = len(ID_list)
         window['aCount'].update(aCount)
         
         r, _, _ = select([device], [], [], 0.01)
