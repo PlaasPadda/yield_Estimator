@@ -2,11 +2,12 @@
 import threading
 import math
 from inputs import get_gamepad
+import evdev
 
 class Controller(object):
     Max_Trig_Val = math.pow(2, 8)
     Max_Joy_Val = math.pow(2, 15)
-
+    	
     def __init__(self):
         self.LJoyX = 0
         self.X_BTN = 0
@@ -40,7 +41,8 @@ class Controller(object):
 
 if __name__=='__main__':
     controller = Controller()
-    
+    print(evdev.list_devices())
+
     steer = "Middle"
     algo = "Off"
     gas = "Stop"
