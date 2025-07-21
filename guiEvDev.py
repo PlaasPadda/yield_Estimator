@@ -9,13 +9,13 @@ from PIL import Image
 import threading
 import math
 import evdev
-from evdev import InputDevice, categorize, ecodes
+from evdev import ecodes
 from select import select
 
 if __name__=='__main__':
 
     print(evdev.list_devices())
-    device = evdev.InputDevice('/dev/input/event25')
+    device = evdev.InputDevice('/dev/input/event21')
     print("Using device:", device)
 
     cam = cv2.VideoCapture(0)
