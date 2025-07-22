@@ -76,16 +76,17 @@ class AppleCounter():
         print(yoloFrame[0].boxes.id)
         print(yoloFrame[0].boxes.cls)
 
-        # list detected objects
-        detections_cls = yoloFrame[0].boxes.cls.tolist()
-        detections_ID = yoloFrame[0].boxes.id.tolist()
+        # list detected objects if there are any   
+        if not (yoloFrame[0].boxes.id == None):
+            detections_cls = yoloFrame[0].boxes.cls.tolist()
+            detections_ID = yoloFrame[0].boxes.id.tolist()
 
-        # loop through objects and check for hit
-        for i in range(0, len(detections_cls)):
-            if (detections_cls[i] in targets) and (detections_ID[i] not in self.ID_list):
-                ID_list.append(detections_ID[i])
-                self.aCount += 1
-                Window['aCount'].update(self.aCount)
+            # loop through objects and check for hit
+            for i in range(0, len(detections_cls)):
+                if (detections_cls[i] in targets) and (detections_ID[i] not in self.ID_list):
+                    self.ID_list.append(detections_ID[i])
+                    self.aCount += 1
+                    Window['aCount'].update(self.aCount)
 
 #------------------------------------FUNCTIONS---------------------------------
 def updateVideo(window, yoloFrame):
@@ -99,11 +100,9 @@ def updateVideo(window, yoloFrame):
 
     window['scan'].update(data=png_bytes)
 
+#----------------------------------MAIN---------------------------------------
 if __name__=='__main__':
 
-    #----- Declare objects -----
-    appleCounter = AppleCounter()
-    controller = Controller()
 
     con_Connected = False
     print('Searching for controller...')
@@ -140,11 +139,14 @@ if __name__=='__main__':
               [sg.Graph(canvas_size=GRAPH_SIZE, graph_bottom_left=(0,0), graph_top_right=GRAPH_SIZE, background_color='lightgreen', key='-GRAPH-'), sg.Column(colMap)]]
 
     window = sg.Window('O-Count', layout, finalize=True)
+    #-------------------------------
     
-    #----- Main Loop -----
+    appleCounter = AppleCounter()
+    controller = Controller()
+    
     while True:
         # Check if window is closed
-        event, values = window.read(timeout=0.01)
+        event, values = window.read(timeout=0)
 
         if (event == sg.WIN_CLOSED):
             break
@@ -152,15 +154,19 @@ if __name__=='__main__':
         #Read from camera
         returned, frame = cam.read()
 
-        #Get results from yolo and bytetrack
+        # Get detection results from yolo and bytetrack
         results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml")
 
+        # Detect if desired objects are within frame
         appleCounter.detectObjects(yoloFrame=results, targets=TARGETS, Window=window)
 
+        # Update video feed on GUI
         updateVideo(window=window, yoloFrame=results)
         
+        # If controller has events ready to be read, read and store them
         if (con_Connected == True):
-            devicesReady, _, _ = select([device], [], [], 0.01)
+            #select returns list of devices ready to be read from (first return) 
+            devicesReady, _, _ = select([device], [], [], 0)   #(Timeout set to 0)
             if device in devicesReady:
                 Y_BTN = controller.readController(Device=device, Window=window)
 
