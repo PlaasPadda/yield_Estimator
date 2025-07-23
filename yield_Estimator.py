@@ -74,6 +74,7 @@ class AppleCounter():
     def detectObjects(self, yoloFrame, targets, Window):
         # print id's and classes
         print(yoloFrame[0].boxes.id)
+        print(self.ID_list)
         print(yoloFrame[0].boxes.cls)
 
         # list detected objects if there are any   
@@ -88,6 +89,10 @@ class AppleCounter():
                     self.aCount += 1
                     Window['aCount'].update(self.aCount)
 
+    def refreshIDList(self, yoloFrame):
+        detections_ID = yoloFrame[0].boxes.id.tolist()
+        self.ID_list = detections_ID.copy()
+        
 #------------------------------------FUNCTIONS---------------------------------
 def updateVideo(window, yoloFrame):
     scan = yoloFrame[0].plot()
@@ -143,6 +148,7 @@ if __name__=='__main__':
     
     appleCounter = AppleCounter()
     controller = Controller()
+    framecount = 0
     
     while True:
         # Check if window is closed
@@ -159,6 +165,14 @@ if __name__=='__main__':
 
         # Detect if desired objects are within frame
         appleCounter.detectObjects(yoloFrame=results, targets=TARGETS, Window=window)
+
+        framecount += 1 
+
+        # After every 120 frames, refresh ID list
+        if (framecount>120):
+            if not (results[0].boxes.id == None):
+                appleCounter.refreshIDList(yoloFrame=results)
+                framecount = 0
 
         # Update video feed on GUI
         updateVideo(window=window, yoloFrame=results)
