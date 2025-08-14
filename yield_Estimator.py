@@ -9,6 +9,8 @@ import math
 import evdev
 from evdev import ecodes
 from select import select
+import serial
+import struct
 
 #---------------------------------------CONSTANTS-------------------------------
 # Define target object as apples
@@ -66,6 +68,10 @@ class Controller():
 
         return self.Y_BTN
 
+    def sendControl(self):
+       packet = struct.pack('<fH', self.steerStren, self.torque) 
+       ser.write(packet)
+
 class AppleCounter():
     def __init__(self):
         self.aCount = 0
@@ -108,6 +114,7 @@ def updateVideo(window, yoloFrame):
 #----------------------------------MAIN---------------------------------------
 if __name__=='__main__':
 
+    ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=0.01)
 
     con_Connected = False
     print('Searching for controller...')
@@ -183,10 +190,15 @@ if __name__=='__main__':
             devicesReady, _, _ = select([device], [], [], 0)   #(Timeout set to 0)
             if device in devicesReady:
                 Y_BTN = controller.readController(Device=device, Window=window)
+                controller.sendControl()
 
                 if (Y_BTN>0):
                     Y_BTN = 0
                     break
+
+        echo_line = ser.readline().decode(errors='ignore').strip()
+        if echo_line:
+            print(f"Echo from ESP32: {echo_line}")
 
     # Release capture and writer objects
     window.close()
