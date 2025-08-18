@@ -2,6 +2,18 @@
 
 Adafruit_BNO08x bno;
 
+float deadband(float x, float th) 
+{
+  if (fabsf(x) < th)
+  {
+    return 0.0f;
+  }
+  else
+  {
+    return x;
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial) delay(10);
@@ -28,11 +40,11 @@ void loop() {
   if (bno.getSensorEvent(&sensorValue)) {
     if (sensorValue.sensorId == SH2_LINEAR_ACCELERATION) {
       Serial.print("Lin Accel X: ");
-      Serial.print(sensorValue.un.linearAcceleration.x);
+      Serial.print(deadband(sensorValue.un.linearAcceleration.x, 0.05f));
       Serial.print("  Y: ");
-      Serial.print(sensorValue.un.linearAcceleration.y);
+      Serial.print(deadband(sensorValue.un.linearAcceleration.y,0.05f));
       Serial.print("  Z: ");
-      Serial.println(sensorValue.un.linearAcceleration.z);
+      Serial.println(deadband(sensorValue.un.linearAcceleration.z,0.05f));
     }
   }
 }
