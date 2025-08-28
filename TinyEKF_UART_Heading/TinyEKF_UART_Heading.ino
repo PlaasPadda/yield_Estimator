@@ -238,7 +238,7 @@ void setup() {
 
   // Measurement noise R
   memset(R, 0, sizeof(R));
-  float std_dev = 3 / 1.177  // std = CEP/1.177
+  float std_dev = 3 / 1.177;  // std = CEP/1.177
   R[0*EKF_M+0] = std_dev * std_dev;    // gps x variance (m^2)  
   R[1*EKF_M+1] = std_dev * std_dev;    // gps y variance (m^2)
   

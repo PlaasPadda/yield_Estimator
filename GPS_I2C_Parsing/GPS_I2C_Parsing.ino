@@ -13,10 +13,21 @@ Adafruit_GPS GPS(&Wire);
 
 // Set GPSECHO to 'false' to turn off echoing the GPS data to the Serial console
 // Set to 'true' if you want to debug and listen to the raw GPS sentences
-#define GPSECHO false
+#define GPSECHO true
+bool   have_origin = false;
 
 uint32_t timer = millis();
+double lat0_deg = 0.0, lon0_deg = 0.0;
+double lat0_rad = 0.0, cos_lat0 = 1.0;
 
+static void ll_to_local_m(double lat_deg, double lon_deg, float &x_m, float &y_m) {
+  // constants (good enough for small areas)
+  const double m_per_deg_lat = 110540.0;   // meters/deg latitude
+  const double m_per_deg_lon = 111320.0 * cos_lat0; // meters/deg longitude at origin
+
+  x_m = (float)((lon_deg - lon0_deg) * m_per_deg_lon);
+  y_m = (float)((lat_deg - lat0_deg) * m_per_deg_lat);
+}
 
 void setup()
 {
@@ -37,12 +48,17 @@ void setup()
   // For parsing data, we don't suggest using anything but either RMC only or RMC+GGA since
   // the parser doesn't care about other sentences at this time
   // Set the update rate
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
+  //GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ); // 10 Hz update rate
   // For the parsing code to work nicely and have time to sort thru the data, and
   // print it out we don't suggest using anything higher than 1 Hz
 
   // Request updates on antenna status, comment out to keep quiet
   GPS.sendCommand(PGCMD_ANTENNA);
+  delay(100);
+
+  GPS.sendCommand("$PMTK386,0*23");           //Turn off static Nav
+  GPS.sendCommand("$PMTK300,200,0,0,0,0*2F"); // 5 Hz fix engine
+  GPS.sendCommand("$PMTK220,200*2C");         // 5 Hz NMEA output
 
   delay(1000);
 
@@ -91,13 +107,19 @@ void loop() // run over and over again
     Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
     if (GPS.fix) {
       Serial.print("Location: ");
-      Serial.print(GPS.latitude, 4); Serial.print(GPS.lat);
+      Serial.print(GPS.latitude, 10); Serial.print(GPS.lat);
       Serial.print(", ");
-      Serial.print(GPS.longitude, 4); Serial.println(GPS.lon);
+      Serial.print(GPS.longitude, 10); Serial.println(GPS.lon);
       Serial.print("Speed (knots): "); Serial.println(GPS.speed);
       Serial.print("Angle: "); Serial.println(GPS.angle);
       Serial.print("Altitude: "); Serial.println(GPS.altitude);
       Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
+  
+      float gps_x_m = 0, gps_y_m = 0;
+      ll_to_local_m(GPS.latitudeDegrees, GPS.longitudeDegrees, gps_x_m, gps_y_m);
+      Serial.print("X pos: "); Serial.println(gps_x_m,7);
+      Serial.print("Y pos: "); Serial.println(gps_y_m,7);
+     
     }
   }
 }
