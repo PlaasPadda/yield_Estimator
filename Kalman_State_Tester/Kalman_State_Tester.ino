@@ -15,10 +15,10 @@ Adafruit_BNO08x bno;
 Adafruit_GPS GPS(&Wire);
 
 // ESP32 pins you said work for you:
-static const int BNO_RX = 16; // ESP32 RX2  (connect to BNO085 TX)
-static const int BNO_TX = 17; // ESP32 TX2  (connect to BNO085 RX)
-static const int GPS_SDA = 25;
-static const int GPS_SCL = 33;
+const int BNO_RX = 16; // ESP32 RX2  (connect to BNO085 TX)
+const int BNO_TX = 17; // ESP32 TX2  (connect to BNO085 RX)
+const int GPS_SDA = 25;
+const int GPS_SCL = 33;
 
 // ================ Heading Helpers =================
 float rad2deg(float r)
@@ -63,68 +63,8 @@ struct EMA {
 ekf_t ekf;
 
 // Covariances (tune these!)
-float S_x, S_y;
+_float_t Q[EKF_N*EKF_N] = {0};  // process noise
 _float_t R[EKF_M*EKF_M] = {0};  // measurement noise
-
-void measureAccelNoiseDensity(HardwareSerial &dbgSerial, float* S_a_x, float* S_a_y, uint16_t N = 2000, float sample_dt = 0.01f) {
-  // N samples at ~1/sample_dt => fs ~ 1/sample_dt
-  const float fs = 1.0f / sample_dt;
-  float sumx=0, sumy=0, sumz=0;
-  float sumx2=0, sumy2=0, sumz2=0;
-
-  dbgSerial.println("Collecting accel samples...");
-  for (uint16_t i=0; i<N; ++i) {
-    // read your sensor sample - replace with your read call
-    sh2_SensorValue_t sv;
-    if (!bno.getSensorEvent(&sv)) {
-      delay((int)(sample_dt*1000));
-      --i; // try again
-      continue;
-    }
-    float ax = sv.un.linearAcceleration.x; // m/s^2
-    float ay = sv.un.linearAcceleration.y;
-    float az = sv.un.linearAcceleration.z;
-
-    sumx += ax; sumy += ay; sumz += az;
-    sumx2 += ax*ax; sumy2 += ay*ay; sumz2 += az*az;
-
-    delay((int)(sample_dt*1000));
-  }
-
-  float meanx = sumx / N;
-  float meany = sumy / N;
-  float meanz = sumz / N;
-
-  float varx = (sumx2 / N) - (meanx*meanx);
-  float vary = (sumy2 / N) - (meany*meany);
-  float varz = (sumz2 / N) - (meanz*meanz);
-
-  float sigma_x = sqrtf(varx);
-  float sigma_y = sqrtf(vary);
-  float sigma_z = sqrtf(varz);
-
-  // noise density n_a = sigma_samples / sqrt(fs/2)
-  float n_x = sigma_x / sqrtf(fs * 0.5f);
-  float n_y = sigma_y / sqrtf(fs * 0.5f);
-  float n_z = sigma_z / sqrtf(fs * 0.5f);
-
-  *S_a_x = n_x * n_x; // m^2 / s^3
-  *S_a_y = n_y * n_y;
-  float S_a_z = n_z * n_z;
-
-  dbgSerial.print("fs: "); dbgSerial.println(fs);
-  dbgSerial.print("sigma_x (m/s^2): "); dbgSerial.println(sigma_x, 6);
-  dbgSerial.print("sigma_y (m/s^2): "); dbgSerial.println(sigma_y, 6);
-  dbgSerial.print("sigma_z (m/s^2): "); dbgSerial.println(sigma_z, 6);
-
-  dbgSerial.print("noise density x (m/s/√Hz): "); dbgSerial.println(n_x, 9);
-  dbgSerial.print("noise density y (m/s/√Hz): "); dbgSerial.println(n_y, 9);
-  dbgSerial.print("noise density z (m/s/√Hz): "); dbgSerial.println(n_z, 9);
-
-  dbgSerial.print("Power Spectral Density x (m^2/s^3): "); dbgSerial.println(*S_a_x, 9);
-  dbgSerial.print("Power Spectral Density y (m^2/s^3): "); dbgSerial.println(*S_a_y, 9);
-  dbgSerial.print("Power Spectral Density z (m^2/s^3): "); dbgSerial.println(S_a_z, 9);
-}
 
 // ================== Timing ==================
 unsigned long last_ms = 0;
@@ -192,6 +132,17 @@ static void ekf_build_h_H(const _float_t *x, _float_t *hx, _float_t *H)
   H[1*EKF_N + 1] = 1;
 }
 
+void printStateStdDevs() {
+  //Serial.println("State 1-sigma (sqrt of diag(P)):");
+  for (int i = 0; i < EKF_N; ++i) {
+    float sigma = sqrtf(ekf.P[i*EKF_N + i]);
+    //Serial.print("x["); Serial.print(i); Serial.print("] σ = ");
+    Serial.println(sigma, 6);
+  }
+}
+
+float heading_available = 0;
+
 void setup() {
   Serial.begin(115200);
   
@@ -233,14 +184,17 @@ void setup() {
   };
   ekf_initialize(&ekf, Pdiag);
 
-  // Power Spectral density
-  measureAccelNoiseDensity(Serial, &S_x, &S_y, 2000, 0.01f);
+  // Process noise Q (will scale by dt each step below; init here with something small)
+  memset(Q, 0, sizeof(Q));
+  Q[0*EKF_N+0] = 0.01f;
+  Q[1*EKF_N+1] = 0.01f;
+  Q[2*EKF_N+2] = 0.1f;
+  Q[3*EKF_N+3] = 0.1f;
 
   // Measurement noise R
   memset(R, 0, sizeof(R));
-  float std_dev = 3 / 1.177  // std = CEP/1.177
-  R[0*EKF_M+0] = std_dev * std_dev;    // gps x variance (m^2)  
-  R[1*EKF_M+1] = std_dev * std_dev;    // gps y variance (m^2)
+  R[0*EKF_M+0] = 4.0f;    // gps x variance (m^2)  ~2m 1-sigma
+  R[1*EKF_M+1] = 4.0f;    // gps y variance (m^2)
   
   last_ms = millis();
   Serial.println("TinyEKF ready");
@@ -279,27 +233,29 @@ void loop() {
       yaw -= headingBias;
       float heading_deg = fmodf(rad2deg(yaw) + 360.0f, 360.0f);
 
-      Serial.print("Heading: "); Serial.println(heading_deg, 1);
+      //Serial.print("Heading: ");
+      //Serial.println(heading_deg, 1);
+      delay(1);   // DONT REMOVE DELAY, IF REMOVED X PRINTS AS 0 (Guessing it has to do with a buffer)
       
     }
     if (sensorValue.sensorId == SH2_LINEAR_ACCELERATION) {
       float ax = deadband(sensorValue.un.linearAcceleration.x, 0.05f);
       float ay = deadband(sensorValue.un.linearAcceleration.y, 0.05f);
       float az = deadband(sensorValue.un.linearAcceleration.z, 0.05f);
-      Serial.print("Lin Accel X: ");
-      Serial.print(ax);
-      Serial.print("  Y: ");
-      Serial.print(ay);
-      Serial.print("  Z: ");
-      Serial.println(az);
+      //Serial.print("Lin Accel X: ");
+      //Serial.print(ax);
+      //Serial.print("  Y: ");
+      //Serial.print(ay);
+      //Serial.print("  Z: ");
+      //Serial.println(az);
       
       float ay_world = ax * cosf(yaw);
       float ax_world = -ax * sinf(yaw);
       
-      Serial.print("  X World: ");
-      Serial.print(ax_world);
-      Serial.print("  Y World: ");
-      Serial.println(ay_world);
+//      Serial.print("  X World: ");
+//      Serial.print(ax_world);
+//      Serial.print("  Y World: ");
+//      Serial.println(ay_world);
       
 
       // ---------- Build prediction (fx, F, Qscaled) ----------
@@ -308,34 +264,13 @@ void loop() {
     
       ekf_build_fx_F(ekf.x, ax_world, ay_world, dt, fx, F);
     
-      // Scale Q with dt
+      // Scale Q gently with dt (very simple scheme)
       _float_t Qscaled[EKF_N*EKF_N];
-      memset(Qscaled, 0, sizeof(Qscaled));
-
-      float dt2 = dt*dt;
-      float dt3 = dt2*dt;
-      float dt4 = dt2*dt2;
-      
-      // 1D blocks
-      float Q11x = S_x * (dt4 * 0.25f);
-      float Q12x = S_x * (dt3 * 0.5f);
-      float Q22x = S_x * dt2;
-      
-      float Q11y = S_y * (dt4 * 0.25f);
-      float Q12y = S_y * (dt3 * 0.5f);
-      float Q22y = S_y * dt2;
-
-      // X block
-      Qscaled[0*EKF_N + 0] = Q11x;
-      Qscaled[0*EKF_N + 2] = Q12x;
-      Qscaled[2*EKF_N + 0] = Q12x;
-      Qscaled[2*EKF_N + 2] = Q22x;
-      
-      // Y block
-      Qscaled[1*EKF_N + 1] = Q11y;
-      Qscaled[1*EKF_N + 3] = Q12y;
-      Qscaled[3*EKF_N + 1] = Q12y;
-      Qscaled[3*EKF_N + 3] = Q22y;
+      memcpy(Qscaled, Q, sizeof(Qscaled));
+      Qscaled[0*EKF_N+0] *= dt;
+      Qscaled[1*EKF_N+1] *= dt;
+      Qscaled[2*EKF_N+2] *= dt;
+      Qscaled[3*EKF_N+3] *= dt;
     
       // ---------- Predict ----------
       ekf_predict(&ekf, fx, F, Qscaled);
@@ -361,32 +296,32 @@ void loop() {
           lat0_rad = lat0_deg * M_PI / 180.0;
           cos_lat0 = cos(lat0_rad);
           have_origin = true;
-          Serial.println("GPS origin lat/lon set");
+          //Serial.println("GPS origin lat/lon set");
         }
       }
     }
   }
   if (newNMEA) {
   char *nmea = GPS.lastNMEA();
-  Serial.println(nmea);  // show what’s actually being parsed
+  //Serial.println(nmea);  // show what’s actually being parsed
   if (GPS.parse(nmea)) {
-    Serial.println("Parsed OK");
+    //Serial.println("Parsed OK");
   } else {
-    Serial.println("Parse failed");
+    //Serial.println("Parse failed");
   }
 }
 
   // ---------- Build measurement when we have GPS fix ----------
-  Serial.print("have_origin = ");
-  Serial.print(have_origin);
-  Serial.print("  have_new_gps = ");
-  Serial.println(have_new_gps);
+  //Serial.print("have_origin = ");
+  //Serial.print(have_origin);
+  //Serial.print("  have_new_gps = ");
+  //Serial.println(have_new_gps);
   
   if (have_origin && have_new_gps) {
 
     float gps_x_m = 0, gps_y_m = 0;
-    Serial.print("lat: "); Serial.print(GPS.latitudeDegrees, 7);
-    Serial.print("  lon: "); Serial.println(GPS.longitudeDegrees, 7);
+    //Serial.print("lat: "); Serial.print(GPS.latitudeDegrees, 7);
+    //Serial.print("  lon: "); Serial.println(GPS.longitudeDegrees, 7);
     ll_to_local_m(GPS.latitudeDegrees, GPS.longitudeDegrees, gps_x_m, gps_y_m);
     
     float dx = gps_x_m - last_gps_x;
@@ -400,8 +335,8 @@ void loop() {
       z[0] = gps_x_m;
       z[1] = gps_y_m;
   
-      Serial.print("gps_x_m:  "); Serial.print(gps_x_m,7);
-      Serial.print("gps_y_m:  "); Serial.println(gps_y_m,7);
+      //Serial.print("gps_x_m:  "); Serial.print(gps_x_m,7);
+      //Serial.print("gps_y_m:  "); Serial.println(gps_y_m,7);
   
       // h(x) and H
       _float_t hx[EKF_N];     // NOTE: tinyekf uses EKF_N for hx buffer size
@@ -416,10 +351,15 @@ void loop() {
   }
 
   // ---------- Debug ----------
-  Serial.print("x: ");  Serial.print(ekf.x[0], 3);
-  Serial.print("  y: ");  Serial.print(ekf.x[1], 3);
-  Serial.print("  vx: "); Serial.print(ekf.x[2], 3);
-  Serial.print("  vy: "); Serial.println(ekf.x[3], 3);
+  //Serial.print("x: ");  
+  Serial.println(ekf.x[0], 3);
+  //Serial.print("  y: ");  
+  Serial.println(ekf.x[1], 3);
+  //Serial.print("  vx: "); 
+  Serial.println(ekf.x[2], 3);
+  //Serial.print("  vy: "); 
+  Serial.println(ekf.x[3], 3);
+  printStateStdDevs();
 
   delay(20); // ~50 Hz loop
 }
