@@ -135,7 +135,9 @@ double lat0_deg = 0.0, lon0_deg = 0.0;
 double lat0_rad = 0.0, cos_lat0 = 1.0;
 float last_gps_x = 0;
 float last_gps_y = 0;
-const float gps_threshold = 1.0f; // meters
+const float gps_threshold = 0; // meters
+float theta_angle = 0, theta_bias = -0.6;
+float x_bias = 0, y_bias = 0;
 
 // quick and decent local meters conversion (ENU-ish)
 static void ll_to_local_m(double lat_deg, double lon_deg, float &x_m, float &y_m) {
@@ -145,6 +147,11 @@ static void ll_to_local_m(double lat_deg, double lon_deg, float &x_m, float &y_m
 
   x_m = (float)((lon_deg - lon0_deg) * m_per_deg_lon);
   y_m = (float)((lat_deg - lat0_deg) * m_per_deg_lat);
+}
+
+void getTheta(float x_m, float y_m, float* theta) {
+  float skuins = sqrtf(x_m*x_m + y_m*y_m);
+  *theta = asinf(x_m/skuins);
 }
 
 // ================== helpers ==================
@@ -218,11 +225,14 @@ void setup() {
   // ---- GPS (I2C) ----
   Wire.begin(GPS_SDA, GPS_SCL);
   GPS.begin(0x10);
-  GPS.sendCommand("$PMTK353,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0*27");
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ); // 10 Hz update rate
   GPS.sendCommand(PGCMD_ANTENNA);
-  delay(200);
+  delay(100);
+  GPS.sendCommand("$PMTK386,0*23");           //Turn off static Nav
+  delay(1000);
+  // Ask for firmware version
+  GPS.println(PMTK_Q_RELEASE);
 
   // ---- EKF init ----
   const _float_t Pdiag[EKF_N] = {
@@ -388,15 +398,16 @@ void loop() {
     Serial.print("lat: "); Serial.print(GPS.latitudeDegrees, 7);
     Serial.print("  lon: "); Serial.println(GPS.longitudeDegrees, 7);
     ll_to_local_m(GPS.latitudeDegrees, GPS.longitudeDegrees, gps_x_m, gps_y_m);
-    
-    float dx = gps_x_m - last_gps_x;
-    float dy = gps_y_m - last_gps_y;
-    float dist = sqrtf(dx*dx + dy*dy);
 
-    if (dist > gps_threshold)
-    {
-      // z = [gps_x, gps_y]
-      _float_t z[EKF_M];
+    getTheta(gps_x_m, gps_y_m, &theta_angle);
+    float skuins = sqrtf(gps_x_m*gps_x_m + gps_y_m*gps_y_m);
+    gps_x_m = skuins*sinf(theta_angle-theta_bias);
+    gps_y_m = skuins*cosf(theta_angle-theta_bias);
+    
+
+    // z = [gps_x, gps_y]
+    _float_t z[EKF_M];
+    if ((gps_x_m == gps_x_m) && (gps_y_m == gps_y_m) ){
       z[0] = gps_x_m;
       z[1] = gps_y_m;
   
@@ -410,8 +421,6 @@ void loop() {
   
       // ---------- Update ----------
       (void)ekf_update(&ekf, z, hx, H, R);
-      last_gps_x = gps_x_m;
-      last_gps_y = gps_y_m;
     }
   }
 

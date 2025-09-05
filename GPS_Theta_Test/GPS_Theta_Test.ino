@@ -16,7 +16,8 @@ Adafruit_GPS GPS(&Wire);
 #define GPSECHO false
 bool   have_origin = false;
 float x_bias = 0, y_bias = 0;
-float theta_angle = 0, theta_bias = -0.6;
+float theta_angle = 0, theta_bias = 0;
+uint16_t counter = 0;
 
 uint32_t timer = millis();
 double lat0_deg = 0.0, lon0_deg = 0.0;
@@ -131,14 +132,24 @@ void loop() // run over and over again
 
       gps_x_m = gps_x_m - x_bias;
       gps_y_m = gps_y_m - y_bias;
+      
+      Serial.print("X pos: "); Serial.println(gps_x_m,7);
+      Serial.print("Y pos: "); Serial.println(gps_y_m,7);
 
       getTheta(gps_x_m, gps_y_m, &theta_angle);
       float skuins = sqrtf(gps_x_m*gps_x_m + gps_y_m*gps_y_m);
       gps_x_m = skuins*sinf(theta_angle-theta_bias);
       gps_y_m = skuins*cosf(theta_angle-theta_bias);
-      
-      Serial.print("X pos: "); Serial.println(gps_x_m,7);
-      Serial.print("Y pos: "); Serial.println(gps_y_m,7);
+
+      Serial.print("X pos corrected: "); Serial.println(gps_x_m,7);
+      Serial.print("Y pos corrected: "); Serial.println(gps_y_m,7);
+      counter++;
+
+      if (counter >= 10) {
+        getTheta(gps_x_m, gps_y_m, &theta_bias);
+        Serial.print("-------------Bias angle--------------: "); Serial.println(theta_bias);
+        counter = -100;
+      }
      
     }
   }
