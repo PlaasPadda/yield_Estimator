@@ -226,7 +226,7 @@ void setup() {
   Wire.begin(GPS_SDA, GPS_SCL);
   GPS.begin(0x10);
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ); // 10 Hz update rate
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 10 Hz update rate
   GPS.sendCommand(PGCMD_ANTENNA);
   delay(100);
   GPS.sendCommand("$PMTK386,0*23");           //Turn off static Nav
