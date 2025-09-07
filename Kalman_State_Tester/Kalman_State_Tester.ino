@@ -15,10 +15,10 @@ Adafruit_BNO08x bno;
 Adafruit_GPS GPS(&Wire);
 
 // ESP32 pins you said work for you:
-const int BNO_RX = 16; // ESP32 RX2  (connect to BNO085 TX)
-const int BNO_TX = 17; // ESP32 TX2  (connect to BNO085 RX)
-const int GPS_SDA = 25;
-const int GPS_SCL = 33;
+static const int BNO_RX = 16; // ESP32 RX2  (connect to BNO085 TX)
+static const int BNO_TX = 17; // ESP32 TX2  (connect to BNO085 RX)
+static const int GPS_SDA = 25;
+static const int GPS_SCL = 33;
 
 // ================ Heading Helpers =================
 float rad2deg(float r)
@@ -136,6 +136,8 @@ double lat0_rad = 0.0, cos_lat0 = 1.0;
 float last_gps_x = 0;
 float last_gps_y = 0;
 const float gps_threshold = 0; // meters
+float theta_angle = 0, theta_bias = -0.6;
+float x_bias = 0, y_bias = 0;
 
 // quick and decent local meters conversion (ENU-ish)
 static void ll_to_local_m(double lat_deg, double lon_deg, float &x_m, float &y_m) {
@@ -145,6 +147,11 @@ static void ll_to_local_m(double lat_deg, double lon_deg, float &x_m, float &y_m
 
   x_m = (float)((lon_deg - lon0_deg) * m_per_deg_lon);
   y_m = (float)((lat_deg - lat0_deg) * m_per_deg_lat);
+}
+
+void getTheta(float x_m, float y_m, float* theta) {
+  float skuins = sqrtf(x_m*x_m + y_m*y_m);
+  *theta = asinf(x_m/skuins);
 }
 
 // ================== helpers ==================
@@ -160,8 +167,8 @@ static void ekf_build_fx_F(const _float_t *x, _float_t ax_w, _float_t ay_w, _flo
   // y'  = y  + vy*dt + 0.5*ay*dt^2
   // vx' = vx + ax*dt
   // vy' = vy + ay*dt
-  fx[0] = x[0] + x[2]*dt + 0.5f*ax_w*dt*dt;
-  fx[1] = x[1] + x[3]*dt + 0.5f*ay_w*dt*dt;
+  fx[0] = x[0] + x[2]*dt + ax_w*dt*dt;
+  fx[1] = x[1] + x[3]*dt + ay_w*dt*dt;
   fx[2] = x[2] + ax_w*dt;
   fx[3] = x[3] + ay_w*dt;
 
@@ -191,17 +198,25 @@ static void ekf_build_h_H(const _float_t *x, _float_t *hx, _float_t *H)
   H[0*EKF_N + 0] = 1;
   H[1*EKF_N + 1] = 1;
 }
-
+uint16_t ack = 0;
 void printStateStdDevs() {
   //Serial.println("State 1-sigma (sqrt of diag(P)):");
   for (int i = 0; i < EKF_N; ++i) {
     float sigma = sqrtf(ekf.P[i*EKF_N + i]);
     //Serial.print("x["); Serial.print(i); Serial.print("] σ = ");
-    Serial.println(sigma, 6);
+    
+  while (!Serial.available() >= 2) {
+    // Block until something arrives
+  }
+  
+      Serial.readBytes((char*)&ack, sizeof(ack));
+      if (ack == 1) {
+        Serial.println(sigma, 6);
+        ack = 0;
+        delay(2);
+      }
   }
 }
-
-float heading_available = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -230,12 +245,13 @@ void setup() {
   Wire.begin(GPS_SDA, GPS_SCL);
   GPS.begin(0x10);
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 10 Hz update rate
   GPS.sendCommand(PGCMD_ANTENNA);
   delay(100);
   GPS.sendCommand("$PMTK386,0*23");           //Turn off static Nav
-  GPS.sendCommand("$PMTK300,200,0,0,0,0*2F"); // 5 Hz fix engine
-  GPS.sendCommand("$PMTK220,200*2C");         // 5 Hz NMEA output
   delay(1000);
+  // Ask for firmware version
+  GPS.println(PMTK_Q_RELEASE);
 
   // ---- EKF init ----
   const _float_t Pdiag[EKF_N] = {
@@ -248,6 +264,8 @@ void setup() {
 
   // Power Spectral density
   measureAccelNoiseDensity(Serial, &S_x, &S_y, 2000, 0.01f);
+  S_x = 1000*S_x;
+  S_y = 1000*S_y;
 
   // Measurement noise R
   memset(R, 0, sizeof(R));
@@ -257,6 +275,16 @@ void setup() {
   
   last_ms = millis();
   Serial.println("TinyEKF ready");
+
+  uint16_t asscount = 0;
+  while (GPS.available()) {
+    GPS.read();
+  
+    asscount++;
+    if (asscount>=2000) {
+      break;
+    }
+  }
 }
 
 void loop() {
@@ -265,6 +293,7 @@ void loop() {
   float dt = (now - last_ms) * 0.001f;
   if (dt <= 0) dt = 0.001f;
   last_ms = now;
+
 
   // ---------- Read IMU ----------
   
@@ -292,21 +321,19 @@ void loop() {
       yaw -= headingBias;
       float heading_deg = fmodf(rad2deg(yaw) + 360.0f, 360.0f);
 
-      //Serial.print("Heading: ");
-      //Serial.println(heading_deg, 1);
-      delay(1);   // DONT REMOVE DELAY, IF REMOVED X PRINTS AS 0 (Guessing it has to do with a buffer)
+      //Serial.print("Heading: "); Serial.println(heading_deg, 1);
       
     }
     if (sensorValue.sensorId == SH2_LINEAR_ACCELERATION) {
       float ax = deadband(sensorValue.un.linearAcceleration.x, 0.05f);
       float ay = deadband(sensorValue.un.linearAcceleration.y, 0.05f);
       float az = deadband(sensorValue.un.linearAcceleration.z, 0.05f);
-      //Serial.print("Lin Accel X: ");
-      //Serial.print(ax);
-      //Serial.print("  Y: ");
-      //Serial.print(ay);
-      //Serial.print("  Z: ");
-      //Serial.println(az);
+//      Serial.print("Lin Accel X: ");
+//      Serial.print(ax);
+//      Serial.print("  Y: ");
+//      Serial.print(ay);
+//      Serial.print("  Z: ");
+//      Serial.println(az);
       
       float ay_world = ax * cosf(yaw);
       float ax_world = -ax * sinf(yaw);
@@ -323,7 +350,7 @@ void loop() {
     
       ekf_build_fx_F(ekf.x, ax_world, ay_world, dt, fx, F);
     
-      // Scale Q gently with dt (very simple scheme)
+      // Scale Q with dt
       _float_t Qscaled[EKF_N*EKF_N];
       memset(Qscaled, 0, sizeof(Qscaled));
 
@@ -362,61 +389,62 @@ void loop() {
   // ---------- GPS parsing ----------
   // keep feeding the parser
 
-  GPS.read();
-  bool newNMEA = GPS.newNMEAreceived();
-
-  bool have_new_gps = false;
-  if (newNMEA) {
-    if (GPS.parse(GPS.lastNMEA())) {
-      have_new_gps = true;
-      if (GPS.fix) {
-        if (!have_origin) {
-          lat0_deg = GPS.latitudeDegrees;
-          lon0_deg = GPS.longitudeDegrees;
-          lat0_rad = lat0_deg * M_PI / 180.0;
-          cos_lat0 = cos(lat0_rad);
-          have_origin = true;
-          //Serial.println("GPS origin lat/lon set");
-        }
-      }
+// read data from the GPS in the 'main loop'
+  uint16_t asscount = 0;
+  while (GPS.available()) {
+    char c = GPS.read();
+  
+    asscount++;
+    if (asscount>=50) {
+      break;
     }
   }
-  if (newNMEA) {
-  char *nmea = GPS.lastNMEA();
-  //Serial.println(nmea);  // show what’s actually being parsed
-  if (GPS.parse(nmea)) {
-    //Serial.println("Parsed OK");
-  } else {
-    //Serial.println("Parse failed");
+
+  bool have_new_gps = false;
+  if (GPS.newNMEAreceived()) {
+    have_new_gps = true;
+    // a tricky thing here is if we print the NMEA sentence, or data
+    // we end up not listening and catching other sentences!
+    // so be very wary if using OUTPUT_ALLDATA and trying to print out data
+    //Serial.println(GPS.lastNMEA()); // this also sets the newNMEAreceived() flag to false
+    if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
+      return; // we can fail to parse a sentence in which case we should just wait for another
+      
+    //Serial.print("GPS UTC seconds: ");
+    //Serial.println(GPS.seconds);
+    //Serial.print("Millis: ");
+    //Serial.println(millis());
   }
-}
 
   // ---------- Build measurement when we have GPS fix ----------
-  //Serial.print("have_origin = ");
-  //Serial.print(have_origin);
-  //Serial.print("  have_new_gps = ");
-  //Serial.println(have_new_gps);
   
-  if (have_origin && have_new_gps) {
-
+  if (GPS.fix && have_new_gps) {
+  
     float gps_x_m = 0, gps_y_m = 0;
-    //Serial.print("lat: "); Serial.print(GPS.latitudeDegrees, 7);
-    //Serial.print("  lon: "); Serial.println(GPS.longitudeDegrees, 7);
     ll_to_local_m(GPS.latitudeDegrees, GPS.longitudeDegrees, gps_x_m, gps_y_m);
     
-    float dx = gps_x_m - last_gps_x;
-    float dy = gps_y_m - last_gps_y;
-    float dist = sqrtf(dx*dx + dy*dy);
+    if (!have_origin) {
+      x_bias = gps_x_m;
+      y_bias = gps_y_m;
+      have_origin = true;
+    }
+  
+    gps_x_m = gps_x_m - x_bias;
+    gps_y_m = gps_y_m - y_bias;
+  
+    getTheta(gps_x_m, gps_y_m, &theta_angle);
+    float skuins = sqrtf(gps_x_m*gps_x_m + gps_y_m*gps_y_m);
+    gps_x_m = skuins*sinf(theta_angle-theta_bias);
+    gps_y_m = skuins*cosf(theta_angle-theta_bias);
 
-    if (dist > gps_threshold)
-    {
-      // z = [gps_x, gps_y]
-      _float_t z[EKF_M];
+    // z = [gps_x, gps_y]
+    _float_t z[EKF_M];
+    if ((gps_x_m == gps_x_m) && (gps_y_m == gps_y_m)) {
       z[0] = gps_x_m;
       z[1] = gps_y_m;
   
-      //Serial.print("gps_x_m:  "); Serial.print(gps_x_m,7);
-      //Serial.print("gps_y_m:  "); Serial.println(gps_y_m,7);
+      //Serial.print("-------------------gps_x_m:  "); Serial.print(gps_x_m,7);
+      //Serial.print("-------------------gps_y_m:  "); Serial.println(gps_y_m,7);
   
       // h(x) and H
       _float_t hx[EKF_N];     // NOTE: tinyekf uses EKF_N for hx buffer size
@@ -425,21 +453,60 @@ void loop() {
   
       // ---------- Update ----------
       (void)ekf_update(&ekf, z, hx, H, R);
-      last_gps_x = gps_x_m;
-      last_gps_y = gps_y_m;
     }
   }
 
+
+
   // ---------- Debug ----------
-  //Serial.print("x: ");  
-  Serial.println(ekf.x[0], 3);
-  //Serial.print("  y: ");  
-  Serial.println(ekf.x[1], 3);
-  //Serial.print("  vx: "); 
-  Serial.println(ekf.x[2], 3);
-  //Serial.print("  vy: "); 
-  Serial.println(ekf.x[3], 3);
+  while (!Serial.available() >= 2) {
+    // Block until something arrives
+  }
+  
+    Serial.readBytes((char*)&ack, sizeof(ack));
+    if (ack == 1) {
+      //Serial.print("x: ");  
+      Serial.println(ekf.x[0], 3);
+      ack = 0;
+      delay(2);
+    }
+
+  while (!Serial.available() >= 2) {
+    // Block until something arrives
+  }
+  
+    Serial.readBytes((char*)&ack, sizeof(ack));
+    if (ack == 1) {
+      //Serial.print("y: ");  
+      Serial.println(ekf.x[1], 3);
+      ack = 0;
+      delay(2);
+    }
+  
+  while (!Serial.available() >= 2) {
+    // Block until something arrives
+  }
+  
+    Serial.readBytes((char*)&ack, sizeof(ack));
+    if (ack == 1) {
+      //Serial.print("  vx: ");  
+      Serial.println(ekf.x[2], 3);
+      ack = 0;
+      delay(2);
+    }
+
+  while (!Serial.available() >= 2) {
+    // Block until something arrives
+  }
+  
+    Serial.readBytes((char*)&ack, sizeof(ack));
+    if (ack == 1) {
+      //Serial.print("  vy: ");  
+      Serial.println(ekf.x[3], 3);
+      ack = 0;
+      delay(2);
+    }
   printStateStdDevs();
 
-  delay(20); // ~50 Hz loop
+  //delay(20); // ~50 Hz loop
 }
