@@ -11,15 +11,12 @@ from evdev import ecodes
 from select import select
 import serial
 import struct
-import numpy as np
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
 
 #---------------------------------------CONSTANTS-------------------------------
 # Define target object as apples
-TARGETS         = [47]
-INPUT_DEVIDER   = pow(2,15)
-ACK             = struct.pack('<H', 1)
+TARGETS = [47]
+INPUT_DEVIDER = pow(2,15)
+
 #--------------------------------------Classes----------------------------------
 class Controller():
     def __init__(self):
@@ -72,25 +69,8 @@ class Controller():
         return self.Y_BTN
 
     def sendControl(self):
-        packet = struct.pack('<fH', self.steerStren, self.torque) 
-        ser.write(packet)
-
-    def receiveControl(self, Window):
-        while True:
-            line = ser.readline().decode(errors='ignore').strip()
-            if (line):  # skip empty
-                try:
-                    self.steerStren = line[0:3]
-                    self.torque = line[3:6]
-                    ser.write(ACK)
-                    break  # only exit once we got it
-                except ValueError:
-                    print(f"Skipped bad line: {line}")
-
-        Window['steerStren'].update(self.steerStren)  # When debugging controller receive
-        Window['torque'].update(self.torque)
-
-
+       packet = struct.pack('<fH', self.steerStren, self.torque) 
+       ser.write(packet)
 
 class AppleCounter():
     def __init__(self):
@@ -118,91 +98,7 @@ class AppleCounter():
     def refreshIDList(self, yoloFrame):
         detections_ID = yoloFrame[0].boxes.id.tolist()
         self.ID_list = detections_ID.copy()
-
-
-class Plotter():
-    def __init__(self, Window):
-        self.x_pos_arr = np.array([])
-        self.y_pos_arr = np.array([])
-        self.x_vel = 0 
-        self.y_vel = 0 
         
-        self.fig, self.ax = plt.subplots()
-
-        self.canvas = Window['-CANVAS-'].TKCanvas
-        
-        self.figure_canvas_agg = FigureCanvasTkAgg(self.fig, self.canvas)
-        self.figure_canvas_agg.draw()
-        self.figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
-
-
-    def read_values(self, ser):
-        #while True:
-        #    line = ser.readline().decode(errors='ignore').strip()
-        #    if (line):  # skip empty
-        #        try:
-        #            self.x_pos_arr = np.append(self.x_pos_arr, float(line))
-        #            ser.write(ACK)
-        #            break  # only exit once we got it
-        #        except ValueError:
-        #            print(f"Skipped bad line: {line}")
-
-        #while True:
-        #    line = ser.readline().decode(errors='ignore').strip()
-        #    if (line):  # skip empty
-        #        try:
-        #            self.y_pos_arr = np.append(self.y_pos_arr, float(line))
-        #            ser.write(ACK)
-        #            break  # only exit once we got it
-        #        except ValueError:
-        #            print(f"Skipped bad line: {line}")
-
-        #while True:
-        #    line = ser.readline().decode(errors='ignore').strip()
-        #    if (line):  # skip empty
-        #        try:
-        #            self.x_vel = float(line)
-        #            ser.write(ACK)
-        #            break  # only exit once we got it
-        #        except ValueError:
-        #            print(f"Skipped bad line: {line}")
-        #
-        #while True:
-        #    line = ser.readline().decode(errors='ignore').strip()
-        #    if (line):  # skip empty
-        #        try:
-        #            self.y_vel = float(line)
-        #            ser.write(ACK)
-        #            break  # only exit once we got it
-        #        except ValueError:
-        #            print(f"Skipped bad line: {line}")
-
-        while True:
-            line = ser.readline().decode(errors='ignore').strip()
-            if (line):  # skip empty
-                try:
-                    x_pos = line[0:6]
-                    y_pos = line[6:12]
-                    self.x_vel = float(line[12:18])
-                    self.y_vel = float(line[18:24])
-                    self.x_pos_arr = np.append(self.x_pos_arr, float(x_pos))
-                    self.y_pos_arr = np.append(self.y_pos_arr, float(y_pos))
-                    ser.write(ACK)
-                    break  # only exit once we got it
-                except ValueError:
-                    print(f"Skipped bad line: {line}")
-
-    def updateCanvas(self):
-        self.ax.cla() #Clear plot
-        self.ax.scatter(self.x_pos_arr, self.y_pos_arr, color="cyan")
-        self.ax.set_xlabel(f"X(m) [{self.x_vel}]") 
-        self.ax.set_ylabel(f"Y(m) [{self.y_vel}]") 
-        self.figure_canvas_agg.draw()
-        #print(self.x_vel)
-        #print(self.y_vel)
-        #print(self.x_pos_arr)
-        #print(self.y_pos_arr)
-
 #------------------------------------FUNCTIONS---------------------------------
 def updateVideo(window, yoloFrame):
     scan = yoloFrame[0].plot()
@@ -218,8 +114,7 @@ def updateVideo(window, yoloFrame):
 #----------------------------------MAIN---------------------------------------
 if __name__=='__main__':
 
-    ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=5)
-    ser.write(ACK)
+    ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=0.01)
 
     con_Connected = False
     print('Searching for controller...')
@@ -253,14 +148,13 @@ if __name__=='__main__':
 
     layout = [[sg.Push(),sg.Text('O-Count'),sg.Push()],
               [sg.Image('/home/plaaspadda/Pictures/PythExecute.png', key='scan',subsample=2),sg.Push(),sg.Column(colRover),sg.Push()],
-              [sg.Canvas(size=GRAPH_SIZE, key='-CANVAS-'), sg.Column(colMap)]]
+              [sg.Graph(canvas_size=GRAPH_SIZE, graph_bottom_left=(0,0), graph_top_right=GRAPH_SIZE, background_color='lightgreen', key='-GRAPH-'), sg.Column(colMap)]]
 
     window = sg.Window('O-Count', layout, finalize=True)
     #-------------------------------
     
     appleCounter = AppleCounter()
     controller = Controller()
-    plotter = Plotter(window)
     framecount = 0
     
     while True:
@@ -296,19 +190,15 @@ if __name__=='__main__':
             devicesReady, _, _ = select([device], [], [], 0)   #(Timeout set to 0)
             if device in devicesReady:
                 Y_BTN = controller.readController(Device=device, Window=window)
-                #controller.sendControl()
-
-                #controller.receiveControl(Window=window) # Use for debugging controller sends
+                controller.sendControl()
 
                 if (Y_BTN>0):
                     Y_BTN = 0
                     break
 
-        plotter.read_values(ser)
-
-        updateIndicator = framecount % 50# Use framecount to also time canvas update to update every 10 frames
-        if (updateIndicator == 0):
-            plotter.updateCanvas()
+        echo_line = ser.readline().decode(errors='ignore').strip()
+        if echo_line:
+            print(f"Echo from ESP32: {echo_line}")
 
     # Release capture and writer objects
     window.close()
