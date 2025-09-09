@@ -137,6 +137,8 @@ class Plotter():
         self.ax.scatter(self.x_pos_arr, self.y_pos_arr, color="cyan")
         self.ax.set_xlabel(f"X(m) [{self.x_vel}]") 
         self.ax.set_ylabel(f"Y(m) [{self.y_vel}]") 
+        self.ax.set_xlim(-30,30)
+        self.ax.set_ylim(-30,30)
         self.figure_canvas_agg.draw()
         #print(self.x_vel)
         #print(self.y_vel)

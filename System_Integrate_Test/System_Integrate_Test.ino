@@ -430,6 +430,7 @@ void loop() {
   
       //Serial.print("-------------------gps_x_m:  "); Serial.print(gps_x_m,7);
       //Serial.print("-------------------gps_y_m:  "); Serial.println(gps_y_m,7);
+      delay(2);
   
       // h(x) and H
       _float_t hx[EKF_N];     // NOTE: tinyekf uses EKF_N for hx buffer size
@@ -453,6 +454,6 @@ void loop() {
       char message[32];
       sprintf(message, "%06.2f%06.2f%06.2f%06.2f%04.0f%03hu", ekf.x[0], ekf.x[1], ekf.x[2], ekf.x[3], steering, power);
       Serial.println(message);
-      delay(5);
+      delay(10);
     }
 }
