@@ -65,9 +65,9 @@ class Controller():
         self.steerStren = int(self.LJoyX*100)
         self.torque = int(self.RTrig*100)
         Window['algo'].update(self.algo)
-        Window['torque'].update(self.torque)
+        #Window['torque'].update(self.torque)
         Window['steer'].update(self.steer)
-        Window['steerStren'].update(self.steerStren)
+        #Window['steerStren'].update(self.steerStren)
 
         return self.Y_BTN
 
@@ -75,21 +75,12 @@ class Controller():
         packet = struct.pack('<fH', self.steerStren, self.torque) 
         ser.write(packet)
 
-    def receiveControl(self, Window):
-        while True:
-            line = ser.readline().decode(errors='ignore').strip()
-            if (line):  # skip empty
-                try:
-                    self.steerStren = line[0:3]
-                    self.torque = line[3:6]
-                    ser.write(ACK)
-                    break  # only exit once we got it
-                except ValueError:
-                    print(f"Skipped bad line: {line}")
+    def updateControl(self, Window, Strstren, Torq):
+        self.steerStren = Strstren
+        self.torque = Torq
 
         Window['steerStren'].update(self.steerStren)  # When debugging controller receive
         Window['torque'].update(self.torque)
-
 
 
 class AppleCounter():
@@ -135,62 +126,11 @@ class Plotter():
         self.figure_canvas_agg.draw()
         self.figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
 
-
-    def read_values(self, ser):
-        #while True:
-        #    line = ser.readline().decode(errors='ignore').strip()
-        #    if (line):  # skip empty
-        #        try:
-        #            self.x_pos_arr = np.append(self.x_pos_arr, float(line))
-        #            ser.write(ACK)
-        #            break  # only exit once we got it
-        #        except ValueError:
-        #            print(f"Skipped bad line: {line}")
-
-        #while True:
-        #    line = ser.readline().decode(errors='ignore').strip()
-        #    if (line):  # skip empty
-        #        try:
-        #            self.y_pos_arr = np.append(self.y_pos_arr, float(line))
-        #            ser.write(ACK)
-        #            break  # only exit once we got it
-        #        except ValueError:
-        #            print(f"Skipped bad line: {line}")
-
-        #while True:
-        #    line = ser.readline().decode(errors='ignore').strip()
-        #    if (line):  # skip empty
-        #        try:
-        #            self.x_vel = float(line)
-        #            ser.write(ACK)
-        #            break  # only exit once we got it
-        #        except ValueError:
-        #            print(f"Skipped bad line: {line}")
-        #
-        #while True:
-        #    line = ser.readline().decode(errors='ignore').strip()
-        #    if (line):  # skip empty
-        #        try:
-        #            self.y_vel = float(line)
-        #            ser.write(ACK)
-        #            break  # only exit once we got it
-        #        except ValueError:
-        #            print(f"Skipped bad line: {line}")
-
-        while True:
-            line = ser.readline().decode(errors='ignore').strip()
-            if (line):  # skip empty
-                try:
-                    x_pos = line[0:6]
-                    y_pos = line[6:12]
-                    self.x_vel = float(line[12:18])
-                    self.y_vel = float(line[18:24])
-                    self.x_pos_arr = np.append(self.x_pos_arr, float(x_pos))
-                    self.y_pos_arr = np.append(self.y_pos_arr, float(y_pos))
-                    ser.write(ACK)
-                    break  # only exit once we got it
-                except ValueError:
-                    print(f"Skipped bad line: {line}")
+    def updateValues(self, X, Y, XV, YV):
+        self.x_pos_arr = np.append(self.x_pos_arr, X)
+        self.y_pos_arr = np.append(self.y_pos_arr, Y)
+        self.x_vel = XV 
+        self.y_vel = YV
 
     def updateCanvas(self):
         self.ax.cla() #Clear plot
@@ -215,11 +155,28 @@ def updateVideo(window, yoloFrame):
 
     window['scan'].update(data=png_bytes)
 
+def read_values(ser):
+    while True:
+        line = ser.readline().decode(errors='ignore').strip()
+        print(line)
+        if (line):  # skip empty
+            try:
+                x_pos = float(line[0:6])
+                y_pos = float(line[6:12])
+                x_vel = float(line[12:18])
+                y_vel = float(line[18:24])
+                steerStren = int(line[24:28])
+                torque = int(line[28:31])
+                break  # only exit once we got it
+            except ValueError:
+                print(f"Skipped bad line: {line}")
+
+    return x_pos, y_pos, x_vel, y_vel, steerStren, torque
+
 #----------------------------------MAIN---------------------------------------
 if __name__=='__main__':
 
     ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=5)
-    ser.write(ACK)
 
     con_Connected = False
     print('Searching for controller...')
@@ -296,17 +253,20 @@ if __name__=='__main__':
             devicesReady, _, _ = select([device], [], [], 0)   #(Timeout set to 0)
             if device in devicesReady:
                 Y_BTN = controller.readController(Device=device, Window=window)
-                #controller.sendControl()
-
-                #controller.receiveControl(Window=window) # Use for debugging controller sends
 
                 if (Y_BTN>0):
                     Y_BTN = 0
                     break
 
-        plotter.read_values(ser)
+        
+        controller.sendControl()
 
-        updateIndicator = framecount % 50# Use framecount to also time canvas update to update every 10 frames
+        x, y, xv, yv, strstren, torq = read_values(ser) 
+
+        controller.updateControl(Window = window, Strstren=strstren, Torq=torq)
+        plotter.updateValues(X=x, Y=y, XV=xv, YV=yv)
+
+        updateIndicator = framecount % 10 # Use framecount to also time canvas update to update every 10 frames
         if (updateIndicator == 0):
             plotter.updateCanvas()
 

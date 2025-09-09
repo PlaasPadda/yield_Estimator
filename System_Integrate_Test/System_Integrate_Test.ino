@@ -198,7 +198,10 @@ static void ekf_build_h_H(const _float_t *x, _float_t *hx, _float_t *H)
   H[0*EKF_N + 0] = 1;
   H[1*EKF_N + 1] = 1;
 }
-uint16_t ack = 0;
+
+// ================ ROBOT =======================
+float steering;
+uint16_t power;
 
 void setup() {
   Serial.begin(115200);
@@ -438,91 +441,18 @@ void loop() {
     }
   }
 
-
-
   // ---------- Debug ----------
-//  while (!Serial.available() >= 2) {
-//    // Block until something arrives
-//  }
-//  
-//    Serial.readBytes((char*)&ack, sizeof(ack));
-//    if (ack == 1) {
-//      //Serial.print("x: ");  
-//      Serial.println(ekf.x[0], 3);
-//      ack = 0;
-//      delay(2);
-//    }
-//
-//  while (!Serial.available() >= 2) {
-//    // Block until something arrives
-//  }
-//  
-//    Serial.readBytes((char*)&ack, sizeof(ack));
-//    if (ack == 1) {
-//      //Serial.print("y: ");  
-//      Serial.println(ekf.x[1], 3);
-//      ack = 0;
-//      delay(2);
-//    }
-//  
-//  while (!Serial.available() >= 2) {
-//    // Block until something arrives
-//  }
-//  
-//    Serial.readBytes((char*)&ack, sizeof(ack));
-//    if (ack == 1) {
-//      //Serial.print("  vx: ");  
-//      Serial.println(ekf.x[2], 3);
-//      ack = 0;
-//      delay(2);
-//    }
-//
-//  while (!Serial.available() >= 2) {
-//    // Block until something arrives
-//  }
-//  
-//    Serial.readBytes((char*)&ack, sizeof(ack));
-//    if (ack == 1) {
-//      //Serial.print("  vy: ");  
-//      Serial.println(ekf.x[3], 3);
-//      ack = 0;
-//      delay(2);
-//    }
-
-    while (!Serial.available() >= 2) {
+    while (!Serial.available() >= 6) {
       // Block until something arrives
     }
 
-    Serial.readBytes((char*)&ack, sizeof(ack));
-    if (ack == 1) {
-      char message[25];
-      sprintf(message, "%06.2f%06.2f%06.2f%06.2f", ekf.x[0], ekf.x[1], ekf.x[2], ekf.x[3]);
+    if (Serial.available() >= 6) { // 4 bytes float + 2 bytes short
+      Serial.readBytes((char*)&steering, sizeof(steering));
+      Serial.readBytes((char*)&power, sizeof(power));
+      
+      char message[32];
+      sprintf(message, "%06.2f%06.2f%06.2f%06.2f%04.0f%03hu", ekf.x[0], ekf.x[1], ekf.x[2], ekf.x[3], steering, power);
       Serial.println(message);
-      ack = 0;
-      delay(2);
+      delay(5);
     }
-
-    
-//    while (!Serial.available() >= 6) {
-//      // Block until something arrives
-//    }
-//
-//    float steering;
-//    uint16_t power;
-//
-//    Serial.readBytes((char*)&ack, sizeof(ack));
-//    if (ack == 1) {
-//      if (Serial.available() >= 6) { // 4 bytes float + 2 bytes short
-//         Serial.readBytes((char*)&steering, sizeof(steering));
-//         Serial.readBytes((char*)&power, sizeof(power));
-//      }
-//      
-//      char message[7];
-//      sprintf(message, "%03.0f%03hu", steering, power);
-//      Serial.println(message);
-//      ack = 0;
-//      delay(2);
-//    }
-
-
 }
