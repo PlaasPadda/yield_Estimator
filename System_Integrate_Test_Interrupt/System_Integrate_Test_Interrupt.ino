@@ -1,14 +1,71 @@
-// ==== TinyEKF config (must come BEFORE including tinyekf.h) ====
+// ==== TinyEKF config ====
 #define EKF_N 4    // state dim: [x,y,vx,vy]
 #define EKF_M 2    // meas  dim: [gps_x, gps_y]
 #define _float_t float
+#define UART_NUM UART_NUM_0     
+#define BUF_SIZE 1024
+#define RD_BUF_SIZE (BUF_SIZE)
 
 #include <Wire.h>
 #include <Adafruit_GPS.h>
 #include "Adafruit_BNO08x.h"
+#include "driver/uart.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 
-// Put the TinyEKF header you pasted into your project as "tinyekf.h"
 #include "tinyekf.h"
+
+// ================ ROBOT =======================
+float steering;
+uint16_t power;
+
+// ================== Interrupts ===================
+// Queue for UART events
+static QueueHandle_t uart_queue;
+
+void uart_event_task(void *pvParameters) {
+  uart_event_t event;
+  uint8_t dtmp[RD_BUF_SIZE];
+
+  for (;;) {
+    // Wait indefinitely for UART events
+    if (xQueueReceive(uart_queue, (void *)&event, portMAX_DELAY)) {
+      switch (event.type) {
+        case UART_DATA:
+          if (event.size >= 6) {  // expect 4 bytes float + 2 bytes short
+            int len = uart_read_bytes(UART_NUM, dtmp, event.size, portMAX_DELAY);
+            if (len >= 6) {
+              memcpy(&steering, dtmp, sizeof(steering));
+              memcpy(&power, dtmp + sizeof(steering), sizeof(power));
+
+              // Example: send back EKF data
+              char message[64];
+              sprintf(message, "%06.2f%06.2f%06.2f%06.2f%04.0f%03hu",
+                      1.23, 4.56, 7.89, 0.12, steering, power);
+              uart_write_bytes(UART_NUM, message, strlen(message));
+              uart_write_bytes(UART_NUM, "\r\n", 2);
+            }
+          }
+          break;
+
+        case UART_FIFO_OVF:
+          // Overflow, flush to recover
+          uart_flush_input(UART_NUM);
+          xQueueReset(uart_queue);
+          break;
+
+        case UART_BUFFER_FULL:
+          // Buffer full, also flush
+          uart_flush_input(UART_NUM);
+          xQueueReset(uart_queue);
+          break;
+
+        default:
+          break;
+      }
+    }
+  }
+}
 
 // ================== Hardware ==================
 Adafruit_BNO08x bno;
@@ -199,9 +256,7 @@ static void ekf_build_h_H(const _float_t *x, _float_t *hx, _float_t *H)
   H[1*EKF_N + 1] = 1;
 }
 
-// ================ ROBOT =======================
-float steering;
-uint16_t power;
+
 
 void setup() {
   Serial.begin(115200);
@@ -270,6 +325,25 @@ void setup() {
       break;
     }
   }
+
+  // Configure UART parameters
+  const uart_config_t uart_config = {
+      .baud_rate = 115200,
+      .data_bits = UART_DATA_8_BITS,
+      .parity = UART_PARITY_DISABLE,
+      .stop_bits = UART_STOP_BITS_1,
+      .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+      .source_clk = UART_SCLK_APB,
+  };
+
+  // Install UART driver with event queue
+  uart_driver_install(UART_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart_queue, 0);
+  uart_param_config(UART_NUM, &uart_config);
+  uart_set_pin(UART_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE,
+               UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+
+  // Create UART event handling task
+  xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, 12, NULL);
 }
 
 void loop() {
@@ -284,7 +358,6 @@ void loop() {
   
   sh2_SensorValue_t sensorValue;
   float yaw;
-  float heading_deg;
   if (bno.getSensorEvent(&sensorValue)) {    
     if (sensorValue.sensorId == SH2_ROTATION_VECTOR) {
 
@@ -305,7 +378,7 @@ void loop() {
 
       // Wrap to 0..360°
       yaw -= headingBias;
-      heading_deg = fmodf(rad2deg(yaw) + 360.0f, 360.0f);
+      float heading_deg = fmodf(rad2deg(yaw) + 360.0f, 360.0f);
 
       //Serial.print("Heading: "); Serial.println(heading_deg, 1);
       
@@ -444,17 +517,17 @@ void loop() {
   }
 
   // ---------- Debug ----------
-    while (!Serial.available() >= 6) {
-      // Block until something arrives
-    }
-
-    if (Serial.available() >= 6) { // 4 bytes float + 2 bytes short
-      Serial.readBytes((char*)&steering, sizeof(steering));
-      Serial.readBytes((char*)&power, sizeof(power));
-      
-      char message[35];
-      sprintf(message, "%06.2f%06.2f%06.2f%06.2f%04.0f%03hu%03.0f", ekf.x[0], ekf.x[1], ekf.x[2], ekf.x[3], steering, power, heading_deg);
-      Serial.println(message);
-      delay(10);
-    }
+//    while (!Serial.available() >= 6) {
+//      // Block until something arrives
+//    }
+//
+//    if (Serial.available() >= 6) { // 4 bytes float + 2 bytes short
+//      Serial.readBytes((char*)&steering, sizeof(steering));
+//      Serial.readBytes((char*)&power, sizeof(power));
+//      
+//      char message[32];
+//      sprintf(message, "%06.2f%06.2f%06.2f%06.2f%04.0f%03hu", ekf.x[0], ekf.x[1], ekf.x[2], ekf.x[3], steering, power);
+//      Serial.println(message);
+//      delay(10);
+//    }
 }

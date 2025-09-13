@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Wedge, Rectangle
 import FreeSimpleGUI as sg
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import random
 
 TREEAMOUNTX = 3
 TREEAMOUNTY = 3
@@ -13,6 +14,11 @@ HALFTREEAREA = 0.5 # half the length of a tree block (in meters)
 ROADWIDTH = 1 # width of space between tree blocks (in meters)
 ROVERWIDTH = 0.6 # width of rover (in meters)
 
+LIGHTGREEN_THRESH = 100
+YELLOW_THRESH = 60
+ORANGE_THRESH = 30
+RED_THRESH = 10
+
 class Boom():
     def __init__(self, TLx, TLy, BRx, BRy):
         self.topLeft = (TLx, TLy)
@@ -21,10 +27,13 @@ class Boom():
         center = 0.5 * (TLy - BRy)
 
         self.treeLeftPos = (TLx, BRy+center) 
-        self.treeLeftCount = 0
+        #self.treeLeftCount = 0
+        self.treeLeftCount = random.randint(0, 150)
+
 
         self.treeRightpos = (BRx, BRy+center)
-        self.treeRightCount = 0
+        #self.treeRightCount = 0
+        self.treeRightCount = random.randint(0, 150)
 
     def inArea(self, RoverX, RoverY):
         if (self.topLeft[0] < RoverX) and (RoverX < self.bottomRight[0]):
@@ -43,6 +52,39 @@ class Boom():
 
     def givePlots(self):
         return self.treeLeftPos, self.treeRightpos
+
+    def returnColours(self):
+        if (self.treeLeftCount >= LIGHTGREEN_THRESH):
+            leftColour = "forestgreen"
+
+        elif ((self.treeLeftCount >= YELLOW_THRESH) and (self.treeLeftCount < LIGHTGREEN_THRESH)):
+            leftColour = "lawngreen"
+
+        elif ((self.treeLeftCount >= ORANGE_THRESH) and (self.treeLeftCount < YELLOW_THRESH)):
+            leftColour = "yellow"
+
+        elif ((self.treeLeftCount >= RED_THRESH) and (self.treeLeftCount < ORANGE_THRESH)):
+            leftColour = "orange"
+
+        elif (self.treeLeftCount < RED_THRESH):
+            leftColour = "red"
+
+        if (self.treeRightCount >= LIGHTGREEN_THRESH):
+            rightColour = "forestgreen"
+
+        elif ((self.treeRightCount >= YELLOW_THRESH) and (self.treeRightCount < LIGHTGREEN_THRESH)):
+            rightColour = "lawngreen"
+
+        elif ((self.treeRightCount >= ORANGE_THRESH) and (self.treeRightCount < YELLOW_THRESH)):
+            rightColour = "yellow"
+
+        elif ((self.treeRightCount >= RED_THRESH) and (self.treeRightCount < ORANGE_THRESH)):
+            rightColour = "orange"
+
+        elif (self.treeRightCount < RED_THRESH):
+            rightColour = "red"
+
+        return leftColour, rightColour
 
 if __name__=='__main__':
     # set up area parameters
@@ -80,17 +122,19 @@ if __name__=='__main__':
         road = Rectangle(bottomLeft, ROADWIDTH, TREEDISTANCE, facecolor="navajowhite", edgecolor="navajowhite")
         ax.add_patch(road)
 
-        leftWedge = Wedge(treeLeftPos, radius, 270, 90, fc='green', ec='green')
+        leftColour, rightColour = tree_list[i].returnColours()
+
+        leftWedge = Wedge(treeLeftPos, radius, 270, 90, fc=leftColour, ec=leftColour)
         ax.add_patch(leftWedge)
 
-        rightWedge = Wedge(treeRightpos, radius, 90, 270, fc='blue', ec='blue')
+        rightWedge = Wedge(treeRightpos, radius, 90, 270, fc=rightColour, ec=rightColour)
         ax.add_patch(rightWedge)
 
     # Set axis limits so wedges are visible
-    ax.set_xlim(-1, 5.5)
-    ax.set_ylim(0, 6)
+    ax.set_xlim(-2, 6.5)
+    ax.set_ylim(-1, 7)
     ax.set_aspect('equal')
-    ax.set_facecolor("lightgreen")
+    ax.set_facecolor("darkseagreen")
 
     plot = plt.gcf()
 
