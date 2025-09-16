@@ -6,8 +6,8 @@ import FreeSimpleGUI as sg
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import random
 
-TREEAMOUNTX = 3
-TREEAMOUNTY = 3
+TREEAMOUNTX = 10 
+TREEAMOUNTY = 5 
 
 TREEDISTANCE = 2 # y distance between trees in a row (in meters)
 HALFTREEAREA = 0.5 # half the length of a tree block (in meters)
@@ -131,14 +131,14 @@ if __name__=='__main__':
         ax.add_patch(rightWedge)
 
     # Set axis limits so wedges are visible
-    ax.set_xlim(-2, 6.5)
-    ax.set_ylim(-1, 7)
+    ax.set_xlim(-2, 21)
+    ax.set_ylim(-1, 11)
     ax.set_aspect('equal')
     ax.set_facecolor("darkseagreen")
 
     plot = plt.gcf()
 
-    layout = [[sg.Push(),sg.Canvas(size=(1000,1000), key='-CANVAS-'), sg.Push(), sg.Image('/home/plaaspadda/Pictures/Untitled.png')]]
+    layout = [[sg.Push(),sg.Canvas(size=(1000,1000), key='-CANVAS-'), sg.Push(), sg.Image('/home/plaaspadda/Pictures/Legend.png')]]
     window = sg.Window('CanvasTest', layout, finalize=True, element_justification='center')
     canvas = window['-CANVAS-'].TKCanvas
 

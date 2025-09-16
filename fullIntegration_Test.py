@@ -47,7 +47,7 @@ class Controller():
         self.steerStren = 0
         self.torque = 0
         self.steer = "Middle"
-        self.algo = "Off"
+        self.direction = 1 
 
     def readController(self, Device, Window):  
         for event in Device.read():
@@ -72,14 +72,15 @@ class Controller():
             self.steer = "Middle"
 
         if (self.X_BTN>0):
-            self.algo = "On"
+            self.direction = 1 
+            Window['direction'].update("Forward")
 
         if (self.B_BTN>0):
-            self.algo = "Off"
+            self.direction = -1 
+            Window['direction'].update("Reverse")
 
         self.steerStren = int(self.LJoyX*100)
-        self.torque = int(self.RTrig*100)
-        Window['algo'].update(self.algo)
+        self.torque = int(self.RTrig*100*self.direction)
         #Window['torque'].update(self.torque)
         Window['steer'].update(self.steer)
         #Window['steerStren'].update(self.steerStren)
@@ -87,7 +88,7 @@ class Controller():
         return self.Y_BTN
 
     def sendControl(self):
-        packet = struct.pack('<fH', self.steerStren, self.torque) 
+        packet = struct.pack('<fh', self.steerStren, self.torque) 
         ser.write(packet)
 
     def updateControl(self, Window, Strstren, Torq):
@@ -256,8 +257,8 @@ def read_values(ser):
                 x_vel = float(line[12:18])
                 y_vel = float(line[18:24])
                 steerStren = int(line[24:28])
-                torque = int(line[28:31])
-                heading = int(line[31:34])
+                torque = int(line[28:32])
+                heading = int(line[32:35])
                 break  # only exit once we got it
             except ValueError:
                 print(f"Skipped bad line: {line}")
@@ -317,7 +318,7 @@ if __name__=='__main__':
 
     #----- Set up GUI window -----
     colRover = [[sg.Text('Driving UI')],
-                [sg.Text('Steer: '), sg.Text('middle', key='steer'), sg.Text(0, key='steerStren'), sg.Text('Algorithm: '), sg.Text('Off', key='algo'), sg.Text('Torque: '), sg.Text(0, key='torque')],
+                [sg.Text('Steer: '), sg.Text('middle', key='steer'), sg.Text(0, key='steerStren'), sg.Text('Algorithm: '), sg.Text('Forward', key='direction'), sg.Text('Torque: '), sg.Text(0, key='torque')],
                 [sg.Text('Count:'), sg.Text(0,key='aCount')]]
 
     colMap = [[sg.Push(),sg.Text('Coordinates: '),sg.Push()],
@@ -325,7 +326,7 @@ if __name__=='__main__':
               [sg.Push(), sg.Text('Orientation: '), sg.Push()]]
 
     layout = [[sg.Push(),sg.Text('O-Count'),sg.Push()],
-              [sg.Image('/home/plaaspadda/Pictures/PythExecute.png', key='scan',subsample=2),sg.Push(),sg.Column(colRover),sg.Push()],
+              [sg.Image('/home/plaaspadda/Pictures/Legend.png', key='scan',subsample=2),sg.Push(),sg.Column(colRover),sg.Push()],
               [sg.Canvas(size=GRAPH_SIZE, key='-CANVAS-'), sg.Column(colMap)]]
 
     window = sg.Window('O-Count', layout, finalize=True)
@@ -436,7 +437,7 @@ if __name__=='__main__':
 
     plot = plt.gcf()
 
-    layout = [[sg.Push(),sg.Canvas(size=(1000,1000), key='-CANVAS-'), sg.Push(), sg.Image('/home/plaaspadda/Pictures/Untitled.png')]]
+    layout = [[sg.Push(),sg.Canvas(size=(1000,1000), key='-CANVAS-'), sg.Push(), sg.Image('/home/plaaspadda/Pictures/Legend.png')]]
     window = sg.Window('CanvasTest', layout, finalize=True, element_justification='center')
     canvas = window['-CANVAS-'].TKCanvas
 

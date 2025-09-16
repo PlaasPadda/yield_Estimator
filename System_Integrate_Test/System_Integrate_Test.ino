@@ -3,12 +3,80 @@
 #define EKF_M 2    // meas  dim: [gps_x, gps_y]
 #define _float_t float
 
+// Motor pins
+#define DIR1   12
+#define DIR2   14
+#define PWM1   26
+#define PWM2   27
+
+
+// PWM setup
+#define FREQ       18000
+#define RESOLUTION LEDC_TIMER_8_BIT
+#define CH1        LEDC_CHANNEL_0
+#define CH2        LEDC_CHANNEL_1
+#define TIMER      LEDC_TIMER_0
+
 #include <Wire.h>
 #include <Adafruit_GPS.h>
 #include "Adafruit_BNO08x.h"
+#include <Arduino.h>
+#include "driver/ledc.h"
 
 // Put the TinyEKF header you pasted into your project as "tinyekf.h"
 #include "tinyekf.h"
+
+// ======= FailSafe ========
+uint32_t lastCommandTime = 0;
+const uint32_t COMMAND_TIMEOUT = 500;
+
+// ===== Motor control =====
+
+float steering;
+int16_t power;
+
+void motorStop() {
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, 0);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, 0);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+}
+
+void motorForward(uint16_t torq) {
+  digitalWrite(DIR1, HIGH);
+  digitalWrite(DIR2, HIGH);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, min(255, 2*torq));
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, min(255, 2*torq));
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+}
+
+void motorBack(uint16_t torq) {
+  digitalWrite(DIR1, LOW);
+  digitalWrite(DIR2, LOW);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, min(255, 2*torq));
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, min(255, 2*torq));
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+}
+
+void motorLeft(uint16_t torq) {
+  digitalWrite(DIR1, LOW);
+  digitalWrite(DIR2, HIGH);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, torq);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, torq);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+}
+
+void motorRight(uint16_t torq) {
+  digitalWrite(DIR1, HIGH);
+  digitalWrite(DIR2, LOW);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, torq);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, torq);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+}
 
 // ================== Hardware ==================
 Adafruit_BNO08x bno;
@@ -199,15 +267,50 @@ static void ekf_build_h_H(const _float_t *x, _float_t *hx, _float_t *H)
   H[1*EKF_N + 1] = 1;
 }
 
-// ================ ROBOT =======================
-float steering;
-uint16_t power;
-
 void setup() {
   Serial.begin(115200);
   
   // Initialize Serial1 for the BNO08x (pins depend on your board!)
   Serial1.begin(3000000, SERIAL_8N1, BNO_RX, BNO_TX);  // most BNO085 boards default to 3Mbaud
+
+  pinMode(DIR1, OUTPUT);
+  pinMode(DIR2, OUTPUT);
+
+  // Configure PWM timer
+  ledc_timer_config_t ledc_timer = {
+      .speed_mode       = LEDC_HIGH_SPEED_MODE,
+      .duty_resolution  = RESOLUTION,
+      .timer_num        = TIMER,
+      .freq_hz          = FREQ,
+      .clk_cfg          = LEDC_AUTO_CLK
+  };
+  ledc_timer_config(&ledc_timer);
+
+  // Configure PWM channel 1
+  ledc_channel_config_t ch1 = {
+      .gpio_num   = PWM1,
+      .speed_mode = LEDC_HIGH_SPEED_MODE,
+      .channel    = CH1,
+      .intr_type  = LEDC_INTR_DISABLE,
+      .timer_sel  = TIMER,
+      .duty       = 0,
+      .hpoint     = 0
+  };
+  ledc_channel_config(&ch1);
+
+  // Configure PWM channel 2
+  ledc_channel_config_t ch2 = {
+      .gpio_num   = PWM2,
+      .speed_mode = LEDC_HIGH_SPEED_MODE,
+      .channel    = CH2,
+      .intr_type  = LEDC_INTR_DISABLE,
+      .timer_sel  = TIMER,
+      .duty       = 0,
+      .hpoint     = 0
+  };
+  ledc_channel_config(&ch2);
+
+  motorStop();
 
   if (!bno.begin_UART(&Serial1)) {
     Serial.println("Failed to find BNO08x chip over UART");
@@ -452,9 +555,32 @@ void loop() {
       Serial.readBytes((char*)&steering, sizeof(steering));
       Serial.readBytes((char*)&power, sizeof(power));
       
-      char message[35];
-      sprintf(message, "%06.2f%06.2f%06.2f%06.2f%04.0f%03hu%03.0f", ekf.x[0], ekf.x[1], ekf.x[2], ekf.x[3], steering, power, heading_deg);
+      char message[36];
+      sprintf(message, "%06.2f%06.2f%06.2f%06.2f%04.0f%04hd%03.0f", ekf.x[0], ekf.x[1], ekf.x[2], ekf.x[3], steering, power, heading_deg);
       Serial.println(message);
+      lastCommandTime = millis();
       delay(10);
+    }
+
+    if (power > 0) {
+      if (steering < -40) {
+        motorRight(abs(power));
+      }
+      else if (steering > 40) {
+        motorLeft(abs(power));
+      }
+      else {
+        motorForward(abs(power));
+      }
+    }
+    else if (power < 0) {
+      motorBack(abs(power));
+    }
+    else {
+      motorStop();
+    }
+
+    if ((millis() - lastCommandTime) > COMMAND_TIMEOUT) {
+      motorStop();
     }
 }

@@ -32,7 +32,7 @@ class Controller():
         self.steerStren = 0
         self.torque = 0
         self.steer = "Middle"
-        self.algo = "Off"
+        self.direction = 1 
 
     def readController(self, Device, Window):  
         for event in Device.read():
@@ -57,14 +57,15 @@ class Controller():
             self.steer = "Middle"
 
         if (self.X_BTN>0):
-            self.algo = "On"
+            self.direction = 1 
+            Window['direction'].update("Forward")
 
         if (self.B_BTN>0):
-            self.algo = "Off"
+            self.direction = -1 
+            Window['direction'].update("Reverse")
 
         self.steerStren = int(self.LJoyX*100)
-        self.torque = int(self.RTrig*100)
-        Window['algo'].update(self.algo)
+        self.torque = int(self.RTrig*100*self.direction)
         #Window['torque'].update(self.torque)
         Window['steer'].update(self.steer)
         #Window['steerStren'].update(self.steerStren)
@@ -72,7 +73,7 @@ class Controller():
         return self.Y_BTN
 
     def sendControl(self):
-        packet = struct.pack('<fH', self.steerStren, self.torque) 
+        packet = struct.pack('<fh', self.steerStren, self.torque) 
         ser.write(packet)
 
     def updateControl(self, Window, Strstren, Torq):
@@ -203,7 +204,7 @@ if __name__=='__main__':
 
     #----- Set up GUI window -----
     colRover = [[sg.Text('Driving UI')],
-                [sg.Text('Steer: '), sg.Text('middle', key='steer'), sg.Text(0, key='steerStren'), sg.Text('Algorithm: '), sg.Text('Off', key='algo'), sg.Text('Torque: '), sg.Text(0, key='torque')],
+                [sg.Text('Steer: '), sg.Text('middle', key='steer'), sg.Text(0, key='steerStren'), sg.Text('Algorithm: '), sg.Text('Forward', key='direction'), sg.Text('Torque: '), sg.Text(0, key='torque')],
                 [sg.Text('Count:'), sg.Text(0,key='aCount')]]
 
     colMap = [[sg.Push(),sg.Text('Coordinates: '),sg.Push()],
