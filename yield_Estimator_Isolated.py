@@ -114,8 +114,6 @@ def updateVideo(window, yoloFrame):
 #----------------------------------MAIN---------------------------------------
 if __name__=='__main__':
 
-    ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=0.01)
-
     con_Connected = False
     print('Searching for controller...')
     input_list = evdev.list_devices()
@@ -195,10 +193,6 @@ if __name__=='__main__':
                 if (Y_BTN>0):
                     Y_BTN = 0
                     break
-
-        echo_line = ser.readline().decode(errors='ignore').strip()
-        if echo_line:
-            print(f"Echo from ESP32: {echo_line}")
 
     # Release capture and writer objects
     window.close()

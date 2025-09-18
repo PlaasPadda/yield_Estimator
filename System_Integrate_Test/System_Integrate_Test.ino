@@ -44,24 +44,15 @@ void motorStop() {
 
 void motorForward(uint16_t torq) {
   digitalWrite(DIR1, HIGH);
-  digitalWrite(DIR2, HIGH);
-  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, min(255, 2*torq));
+  digitalWrite(DIR2, LOW);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, torq);
   ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
-  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, min(255, 2*torq));
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, torq);
   ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
 }
 
 void motorBack(uint16_t torq) {
   digitalWrite(DIR1, LOW);
-  digitalWrite(DIR2, LOW);
-  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, min(255, 2*torq));
-  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
-  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, min(255, 2*torq));
-  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
-}
-
-void motorLeft(uint16_t torq) {
-  digitalWrite(DIR1, LOW);
   digitalWrite(DIR2, HIGH);
   ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, torq);
   ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
@@ -69,12 +60,21 @@ void motorLeft(uint16_t torq) {
   ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
 }
 
+void motorLeft(uint16_t torq) {
+  digitalWrite(DIR1, LOW);
+  digitalWrite(DIR2, LOW);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, min(200, 2*torq));
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, min(200, 2*torq));
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+}
+
 void motorRight(uint16_t torq) {
   digitalWrite(DIR1, HIGH);
-  digitalWrite(DIR2, LOW);
-  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, torq);
+  digitalWrite(DIR2, HIGH);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, min(200, 2*torq));
   ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
-  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, torq);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, min(200,2*torq));
   ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
 }
 
