@@ -218,8 +218,11 @@ class Boom():
         elif ((self.treeLeftCount >= RED_THRESH) and (self.treeLeftCount < ORANGE_THRESH)):
             leftColour = "orange"
 
-        elif (self.treeLeftCount < RED_THRESH):
+        elif ((self.treeLeftCount > 0) and (self.treeLeftCount < RED_THRESH)):
             leftColour = "red"
+
+        elif (self.treeLeftCount == 0):
+            leftColour = "darkseagreen"
 
         if (self.treeRightCount >= LIGHTGREEN_THRESH):
             rightColour = "forestgreen"
@@ -233,11 +236,13 @@ class Boom():
         elif ((self.treeRightCount >= RED_THRESH) and (self.treeRightCount < ORANGE_THRESH)):
             rightColour = "orange"
 
-        elif (self.treeRightCount < RED_THRESH):
+        elif ((self.treeRightCount > 0) and (self.treeRightCount < RED_THRESH)):
             rightColour = "red"
 
-        return leftColour, rightColour
+        elif (self.treeRightCount == 0):
+            rightColour = "darkseagreen"
 
+        return leftColour, rightColour
 #------------------------------------FUNCTIONS---------------------------------
 def updateVideo(window, yoloFrame):
     scan = yoloFrame[0].plot()
