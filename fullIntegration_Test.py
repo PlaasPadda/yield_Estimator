@@ -23,8 +23,8 @@ TARGETS         = [47]
 INPUT_DEVIDER   = pow(2,15)
 ACK             = struct.pack('<H', 1)
 
-TREEAMOUNTX = 3
-TREEAMOUNTY = 3
+TREEAMOUNTX = 30
+TREEAMOUNTY = 30
 
 TREEDISTANCE = 2 # y distance between trees in a row (in meters)
 HALFTREEAREA = 0.5 # half the length of a tree block (in meters)
@@ -187,7 +187,11 @@ class Boom():
         if (self.topLeft[0] < RoverX) and (RoverX < self.bottomRight[0]):
             if (self.bottomRight[1] < RoverY) and (RoverY < self.topLeft[1]):
                 return True
-        
+       
+        print(self.topLeft[0])
+        print(self.topLeft[1])
+        print(self.bottomRight[0])
+        print(self.bottomRight[1])
         return False
 
     def updateCount(self, Count, Heading):
@@ -336,7 +340,7 @@ if __name__=='__main__':
     controller = Controller()
     plotter = Plotter(window)
     framecount = 0
-    lastArea = (0, 0)
+    lastArea = ((-HALFTREEAREA - 0.5*ROVERWIDTH), 0) 
     
     while True:
         # Check if window is closed
@@ -396,9 +400,9 @@ if __name__=='__main__':
             treeBlock = treeBlock - 1
             lastArea = (lastArea[0], (lastArea[1]-TREEDISTANCE))
 
-        if (tree_list[treeBlock].inArea(x,y)):
-            tree_list[treeBlock].updateCount(Count=count, Heading=head)
-        else:
+        tree_list[treeBlock].updateCount(Count=count, Heading=head)
+
+        if not (tree_list[treeBlock].inArea(x,y)):
             print("Misalignment Detected: rover no longer in expected block")
 
         updateIndicator = framecount % 10 # Use framecount to also time canvas update to update every 10 frames
@@ -430,10 +434,12 @@ if __name__=='__main__':
         ax.add_patch(rightWedge)
 
     # Set axis limits so wedges are visible
-    ax.set_xlim(-2, 6.5)
-    ax.set_ylim(-1, 7)
+    #ax.set_xlim(-2, 6.5)
+    #ax.set_ylim(-1, 7)
     ax.set_aspect('equal')
     ax.set_facecolor("darkseagreen")
+    ax.axis('auto')
+    ax.set_autoscale_on(True)
 
     plot = plt.gcf()
 
