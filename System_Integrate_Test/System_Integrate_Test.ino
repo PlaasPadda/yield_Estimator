@@ -411,6 +411,7 @@ void loop() {
       heading_deg = fmodf(rad2deg(yaw) + 360.0f, 360.0f);
 
       //Serial.print("Heading: "); Serial.println(heading_deg, 1);
+      delay(1);
       
     }
     if (sensorValue.sensorId == SH2_LINEAR_ACCELERATION) {

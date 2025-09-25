@@ -23,8 +23,8 @@ TARGETS         = [47]
 INPUT_DEVIDER   = pow(2,15)
 ACK             = struct.pack('<H', 1)
 
-TREEAMOUNTX = 30
-TREEAMOUNTY = 30
+TREEAMOUNTX = 10
+TREEAMOUNTY = 10
 
 TREEDISTANCE = 2 # y distance between trees in a row (in meters)
 HALFTREEAREA = 0.5 # half the length of a tree block (in meters)
