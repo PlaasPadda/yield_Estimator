@@ -565,10 +565,10 @@ void loop() {
 
     if (power > 0) {
       if (steering < -40) {
-        motorRight(abs(power));
+        motorLeft(abs(power));
       }
       else if (steering > 40) {
-        motorLeft(abs(power));
+        motorRight(abs(power));
       }
       else {
         motorForward(abs(power));
