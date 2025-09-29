@@ -136,7 +136,7 @@ double lat0_rad = 0.0, cos_lat0 = 1.0;
 float last_gps_x = 0;
 float last_gps_y = 0;
 const float gps_threshold = 0; // meters
-float theta_angle = 0, theta_bias = -0.6;
+float theta_angle = 0, theta_bias = 1.35;
 float x_bias = 0, y_bias = 0;
 
 // quick and decent local meters conversion (ENU-ish)
@@ -322,7 +322,7 @@ void loop() {
       float heading_deg = fmodf(rad2deg(yaw) + 360.0f, 360.0f);
 
       //Serial.print("Heading: "); Serial.println(heading_deg, 1);
-      delay(1);   //DO NOT REMOVE DELAY, OTHERWISE X DOES NOT PRINT
+      //delay(1);   //DO NOT REMOVE DELAY, OTHERWISE X DOES NOT PRINT
       
     }
     if (sensorValue.sensorId == SH2_LINEAR_ACCELERATION) {
