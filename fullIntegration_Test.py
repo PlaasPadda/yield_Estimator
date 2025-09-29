@@ -157,9 +157,9 @@ class Plotter():
 
     def updateCanvas(self):
         self.ax.cla() #Clear plot
-        self.ax.scatter(self.x_pos_arr, self.y_pos_arr, color="cyan")
-        self.ax.set_xlabel(f"X(m) [{self.x_vel}]") 
-        self.ax.set_ylabel(f"Y(m) [{self.y_vel}]") 
+        self.ax.plot(self.x_pos_arr, self.y_pos_arr, color="cyan", linewidth=3)
+        self.ax.set_xlabel("X position (m)") 
+        self.ax.set_ylabel("Y position (m)") 
         self.ax.set_xlim(-30,30)
         self.ax.set_ylim(-30,30)
         self.figure_canvas_agg.draw()
@@ -330,13 +330,13 @@ if __name__=='__main__':
     GRAPH_SIZE = (FRAME_WIDTH, FRAME_HEIGHT)
 
     #----- Set up GUI window -----
-    colRover = [[sg.Text('Driving UI')],
-                [sg.Text('Steer: '), sg.Text('middle', key='steer'), sg.Text(0, key='steerStren'), sg.Text('Algorithm: '), sg.Text('Forward', key='direction'), sg.Text('Torque: '), sg.Text(0, key='torque')],
-                [sg.Text('Count:'), sg.Text(0,key='aCount')]]
+    colRover = [[sg.Push(),sg.Text('Driving Status'),sg.Push()],
+                [sg.Text('Steer: '), sg.Text('middle', key='steer'), sg.Text(0, key='steerStren'), sg.Text('Direction: '), sg.Text('Forward', key='direction'), sg.Text('Torque: '), sg.Text(0, key='torque')],
+                [sg.Push(),sg.Text('Count:'), sg.Text(0,key='aCount'),sg.Push()]]
 
-    colMap = [[sg.Push(),sg.Text('Rover Velocity: '),sg.Push()],
+    colMap = [[sg.Push(),sg.Text('Rover Status'),sg.Push()],
               [sg.Text('X Velocity (m/s): '), sg.Text(0, key='XVEL'), sg.Push(), sg.Text('Y Velocity (m/s): '), sg.Text(0, key='YVEL')],
-              [sg.Push(), sg.Text('Orientation: '), sg.Text(0, key='HEADING'), sg.Push()]]
+              [sg.Push(), sg.Text('Orientation (degrees): '), sg.Text(0, key='HEADING'), sg.Push()]]
 
     layout = [[sg.Push(),sg.Text('O-Count'),sg.Push()],
               [sg.Image('/home/plaaspadda/Pictures/Legend.png', key='scan',subsample=2),sg.Push(),sg.Column(colRover),sg.Push()],
@@ -401,9 +401,9 @@ if __name__=='__main__':
 
         x, y, xv, yv, strstren, torq, head = read_values(ser) 
         
-        Window['XVEL'].update(xv)
-        Window['YVEL'].update(yv)
-        Window['HEADING'].update(head)
+        window['XVEL'].update(xv)
+        window['YVEL'].update(yv)
+        window['HEADING'].update(head)
 
         controller.updateControl(Window = window, Strstren=strstren, Torq=torq)
         plotter.updateValues(X=x, Y=y, XV=xv, YV=yv)
@@ -465,6 +465,9 @@ if __name__=='__main__':
     # Set axis limits so wedges are visible
     #ax.set_xlim(-2, 6.5)
     #ax.set_ylim(-1, 7)
+    ax.set_xlabel("X position (m)")
+    ax.set_ylabel("Y position (m)")
+    ax.set_title("Yield Map", fontdict={'fontsize': 16, 'fontweight': 'bold'})
     ax.set_aspect('equal')
     ax.set_facecolor("darkseagreen")
     ax.axis('auto')
