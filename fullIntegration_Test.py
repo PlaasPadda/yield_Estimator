@@ -16,10 +16,11 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from matplotlib.patches import Wedge, Rectangle
 import random
+import time
 
 #---------------------------------------CONSTANTS-------------------------------
 # Define target object as apples
-TARGETS         = [47]
+TARGETS         = [1]
 INPUT_DEVIDER   = pow(2,15)
 ACK             = struct.pack('<H', 1)
 
@@ -166,6 +167,9 @@ class Plotter():
         #print(self.y_vel)
         #print(self.x_pos_arr)
         #print(self.y_pos_arr)
+
+    def giveRoute(self):
+        return self.x_pos_arr, self.y_pos_arr
 
 class Boom():
     def __init__(self, TLx, TLy, BRx, BRy):
@@ -318,7 +322,7 @@ if __name__=='__main__':
         print("Using device:", device)
 
     cam = cv2.VideoCapture(0)
-    model = YOLO("yolo11m.pt")
+    model = YOLO("yolo11s_appleset.pt")
     
     # Get the default frame width and height
     FRAME_WIDTH = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -330,9 +334,9 @@ if __name__=='__main__':
                 [sg.Text('Steer: '), sg.Text('middle', key='steer'), sg.Text(0, key='steerStren'), sg.Text('Algorithm: '), sg.Text('Forward', key='direction'), sg.Text('Torque: '), sg.Text(0, key='torque')],
                 [sg.Text('Count:'), sg.Text(0,key='aCount')]]
 
-    colMap = [[sg.Push(),sg.Text('Coordinates: '),sg.Push()],
-              [sg.Text('Longitude: '), sg.Text(0, key='coorLong'), sg.Push(), sg.Text('Latitude: '), sg.Text(0, key='coorLat')],
-              [sg.Push(), sg.Text('Orientation: '), sg.Push()]]
+    colMap = [[sg.Push(),sg.Text('Rover Velocity: '),sg.Push()],
+              [sg.Text('X Velocity (m/s): '), sg.Text(0, key='XVEL'), sg.Push(), sg.Text('Y Velocity (m/s): '), sg.Text(0, key='YVEL')],
+              [sg.Push(), sg.Text('Orientation: '), sg.Text(0, key='HEADING'), sg.Push()]]
 
     layout = [[sg.Push(),sg.Text('O-Count'),sg.Push()],
               [sg.Image('/home/plaaspadda/Pictures/Legend.png', key='scan',subsample=2),sg.Push(),sg.Column(colRover),sg.Push()],
@@ -346,6 +350,10 @@ if __name__=='__main__':
     plotter = Plotter(window)
     framecount = 0
     lastArea = ((-HALFTREEAREA - 0.5*ROVERWIDTH), 0) 
+
+    #Start Timer
+    start_time = time.time()
+    loopCounter = 0
     
     while True:
         # Check if window is closed
@@ -353,12 +361,16 @@ if __name__=='__main__':
 
         if (event == sg.WIN_CLOSED):
             break
+
+        loopCounter += 1
     
         #Read from camera
         returned, frame = cam.read()
 
         # Get detection results from yolo and bytetrack
-        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml")
+        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False)
+
+        #results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False, classes=[47])
 
         # Detect if desired objects are within frame
         count = appleCounter.detectObjects(yoloFrame=results, targets=TARGETS, Window=window)
@@ -388,7 +400,10 @@ if __name__=='__main__':
         controller.sendControl()
 
         x, y, xv, yv, strstren, torq, head = read_values(ser) 
-        print(head)
+        
+        Window['XVEL'].update(xv)
+        Window['YVEL'].update(yv)
+        Window['HEADING'].update(head)
 
         controller.updateControl(Window = window, Strstren=strstren, Torq=torq)
         plotter.updateValues(X=x, Y=y, XV=xv, YV=yv)
@@ -419,6 +434,11 @@ if __name__=='__main__':
     cam.release()
     cv2.destroyAllWindows()
 
+    #Print FPS
+    end_time = time.time()
+    fps = loopCounter / (end_time - start_time)
+    print("Frames Per Second: ", fps)
+
     # set up plot parameters 
     fig, ax = plt.subplots()
     radius = 0.8 * (HALFTREEAREA) 
@@ -437,6 +457,10 @@ if __name__=='__main__':
 
         rightWedge = Wedge(treeRightpos, radius, 90, 270, fc=rightColour, ec=rightColour)
         ax.add_patch(rightWedge)
+
+    #Plot route
+    x_arr, y_arr = plotter.giveRoute() 
+    ax.plot(x_arr, y_arr, color="cyan", linewidth=3)
 
     # Set axis limits so wedges are visible
     #ax.set_xlim(-2, 6.5)
