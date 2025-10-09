@@ -6,13 +6,13 @@ import FreeSimpleGUI as sg
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import random
 
-TREEAMOUNTX = 10 
-TREEAMOUNTY = 5 
+TREEAMOUNTX = 5 
+TREEAMOUNTY = 3 
 
-TREEDISTANCE = 2 # y distance between trees in a row (in meters)
-HALFTREEAREA = 0.5 # half the length of a tree block (in meters)
-ROADWIDTH = 1 # width of space between tree blocks (in meters)
-ROVERWIDTH = 0.6 # width of rover (in meters)
+TREEDISTANCE = 4 # y distance between trees in a row (in meters)
+HALFTREEAREA = 0.8 # half the length of a tree block (in meters)
+ROADWIDTH = 2 # width of space between tree blocks (in meters)
+ROVERWIDTH = 1 # width of rover (in meters)
 
 LIGHTGREEN_THRESH = 100
 YELLOW_THRESH = 60

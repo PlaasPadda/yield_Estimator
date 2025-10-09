@@ -20,22 +20,22 @@ import time
 
 #---------------------------------------CONSTANTS-------------------------------
 # Define target object as apples
-TARGETS         = [1]
+TARGETS         = [0]
 INPUT_DEVIDER   = pow(2,15)
 ACK             = struct.pack('<H', 1)
 
-TREEAMOUNTX = 10
-TREEAMOUNTY = 10
+TREEAMOUNTX = 2 
+TREEAMOUNTY = 6 
 
-TREEDISTANCE = 2 # y distance between trees in a row (in meters)
-HALFTREEAREA = 0.5 # half the length of a tree block (in meters)
-ROADWIDTH = 1 # width of space between tree blocks (in meters)
-ROVERWIDTH = 0.6 # width of rover (in meters)
+TREEDISTANCE = 1.5 # y distance between trees in a row (in meters)
+HALFTREEAREA = 0.3 # half the length of a tree block (in meters)
+ROADWIDTH = 3 # width of space between tree blocks (in meters)
+ROVERWIDTH = 0.7 # width of rover (in meters)
 
-LIGHTGREEN_THRESH = 100
-YELLOW_THRESH = 60
-ORANGE_THRESH = 30
-RED_THRESH = 10
+LIGHTGREEN_THRESH = 4 
+YELLOW_THRESH = 3 
+ORANGE_THRESH = 2
+RED_THRESH = 1
 #--------------------------------------Classes----------------------------------
 class Controller():
     def __init__(self):
@@ -160,8 +160,8 @@ class Plotter():
         self.ax.plot(self.x_pos_arr, self.y_pos_arr, color="cyan", linewidth=3)
         self.ax.set_xlabel("X position (m)") 
         self.ax.set_ylabel("Y position (m)") 
-        self.ax.set_xlim(-30,30)
-        self.ax.set_ylim(-30,30)
+        self.ax.set_xlim(-40,40)
+        self.ax.set_ylim(-40,40)
         self.figure_canvas_agg.draw()
         #print(self.x_vel)
         #print(self.y_vel)
@@ -322,7 +322,10 @@ if __name__=='__main__':
         print("Using device:", device)
 
     cam = cv2.VideoCapture(0)
-    model = YOLO("yolo11s_appleset.pt")
+    #model = YOLO("yolov8m_appleset.pt")
+    #model = YOLO("yolo11m.pt")
+    model = YOLO("yolov8m_Orchard.pt")
+
     
     # Get the default frame width and height
     FRAME_WIDTH = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -368,7 +371,7 @@ if __name__=='__main__':
         returned, frame = cam.read()
 
         # Get detection results from yolo and bytetrack
-        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False)
+        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=True, save=False)
 
         #results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False, classes=[47])
 

@@ -145,7 +145,7 @@ void loop() // run over and over again
       Serial.print("Y pos corrected: "); Serial.println(gps_y_m,7);
       counter++;
 
-      if (counter >= 10) {
+      if (counter >= 15) {
         getTheta(gps_x_m, gps_y_m, &theta_bias);
         Serial.print("-------------Bias angle--------------: "); Serial.println(theta_bias);
         counter = -100;

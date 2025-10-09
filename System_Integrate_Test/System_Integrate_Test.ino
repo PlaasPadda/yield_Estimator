@@ -40,6 +40,8 @@ void motorStop() {
   ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
   ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, 0);
   ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+  digitalWrite(DIR1, LOW);
+  digitalWrite(DIR2, LOW);
 }
 
 void motorForward(uint16_t torq) {
@@ -204,7 +206,7 @@ double lat0_rad = 0.0, cos_lat0 = 1.0;
 float last_gps_x = 0;
 float last_gps_y = 0;
 const float gps_threshold = 0; // meters
-float theta_angle = 0, theta_bias = 1.35;
+float theta_angle = 0, theta_bias = 1.3f;
 float x_bias = 0, y_bias = 0;
 
 // quick and decent local meters conversion (ENU-ish)
@@ -235,8 +237,8 @@ static void ekf_build_fx_F(const _float_t *x, _float_t ax_w, _float_t ay_w, _flo
   // y'  = y  + vy*dt + 0.5*ay*dt^2
   // vx' = vx + ax*dt
   // vy' = vy + ay*dt
-  fx[0] = x[0] + x[2]*dt + ax_w*dt*dt;
-  fx[1] = x[1] + x[3]*dt + ay_w*dt*dt;
+  fx[0] = x[0] + x[2]*dt + 0.5f*ax_w*dt*dt;
+  fx[1] = x[1] + x[3]*dt + 0.5f*ay_w*dt*dt;
   fx[2] = x[2] + ax_w*dt;
   fx[3] = x[3] + ay_w*dt;
 
@@ -333,7 +335,7 @@ void setup() {
   Wire.begin(GPS_SDA, GPS_SCL);
   GPS.begin(0x10);
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 10 Hz update rate
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
   GPS.sendCommand(PGCMD_ANTENNA);
   delay(100);
   GPS.sendCommand("$PMTK386,0*23");           //Turn off static Nav
@@ -352,8 +354,8 @@ void setup() {
 
   // Power Spectral density
   measureAccelNoiseDensity(Serial, &S_x, &S_y, 2000, 0.01f);
-  S_x = 1000*S_x;
-  S_y = 1000*S_y;
+  S_x = 500*S_x;
+  S_y = 500*S_y;
 
   // Measurement noise R
   memset(R, 0, sizeof(R));
@@ -411,10 +413,11 @@ void loop() {
       heading_deg = fmodf(rad2deg(yaw) + 360.0f, 360.0f);
 
       //Serial.print("Heading: "); Serial.println(heading_deg, 1);
-      //delay(1);
+      yield();
       
     }
     if (sensorValue.sensorId == SH2_LINEAR_ACCELERATION) {
+      delay(10);
       float ax = deadband(sensorValue.un.linearAcceleration.x, 0.05f);
       float ay = deadband(sensorValue.un.linearAcceleration.y, 0.05f);
       float az = deadband(sensorValue.un.linearAcceleration.z, 0.05f);
@@ -444,18 +447,29 @@ void loop() {
       _float_t Qscaled[EKF_N*EKF_N];
       memset(Qscaled, 0, sizeof(Qscaled));
 
+//      float dt2 = dt*dt;
+//      float dt3 = dt2*dt;
+//      float dt4 = dt2*dt2;
+//      
+//      // 1D blocks
+//      float Q11x = S_x * (dt4 * 0.25f);
+//      float Q12x = S_x * (dt3 * 0.5f);
+//      float Q22x = S_x * dt2;
+//      
+//      float Q11y = S_y * (dt4 * 0.25f);
+//      float Q12y = S_y * (dt3 * 0.5f);
+//      float Q22y = S_y * dt2;
+
       float dt2 = dt*dt;
       float dt3 = dt2*dt;
-      float dt4 = dt2*dt2;
       
-      // 1D blocks
-      float Q11x = S_x * (dt4 * 0.25f);
-      float Q12x = S_x * (dt3 * 0.5f);
-      float Q22x = S_x * dt2;
-      
-      float Q11y = S_y * (dt4 * 0.25f);
-      float Q12y = S_y * (dt3 * 0.5f);
-      float Q22y = S_y * dt2;
+      float Q11x = S_x * (dt3 / 3.0f);
+      float Q12x = S_x * (dt2 / 2.0f);
+      float Q22x = S_x * dt;
+
+      float Q11y = S_y * (dt3 / 3.0f);
+      float Q12y = S_y * (dt2 / 2.0f);
+      float Q22y = S_y * dt;
 
       // X block
       Qscaled[0*EKF_N + 0] = Q11x;
@@ -485,7 +499,7 @@ void loop() {
     char c = GPS.read();
   
     asscount++;
-    if (asscount>=50) {
+    if (asscount>=10) {
       break;
     }
   }
@@ -535,7 +549,6 @@ void loop() {
   
       //Serial.print("-------------------gps_x_m:  "); Serial.print(gps_x_m,7);
       //Serial.print("-------------------gps_y_m:  "); Serial.println(gps_y_m,7);
-      delay(2);
   
       // h(x) and H
       _float_t hx[EKF_N];     // NOTE: tinyekf uses EKF_N for hx buffer size

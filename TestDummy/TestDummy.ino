@@ -3,12 +3,82 @@
 #define EKF_M 2    // meas  dim: [gps_x, gps_y]
 #define _float_t float
 
+// Motor pins
+#define DIR1   12
+#define DIR2   14
+#define PWM1   26
+#define PWM2   27
+
+
+// PWM setup
+#define FREQ       18000
+#define RESOLUTION LEDC_TIMER_8_BIT
+#define CH1        LEDC_CHANNEL_0
+#define CH2        LEDC_CHANNEL_1
+#define TIMER      LEDC_TIMER_0
+
 #include <Wire.h>
 #include <Adafruit_GPS.h>
 #include "Adafruit_BNO08x.h"
+#include <Arduino.h>
+#include "driver/ledc.h"
 
 // Put the TinyEKF header you pasted into your project as "tinyekf.h"
 #include "tinyekf.h"
+
+// ======= FailSafe ========
+uint32_t lastCommandTime = 0;
+const uint32_t COMMAND_TIMEOUT = 500;
+
+// ===== Motor control =====
+
+float steering;
+int16_t power;
+
+void motorStop() {
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, 0);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, 0);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+  digitalWrite(DIR1, LOW);
+  digitalWrite(DIR2, LOW);
+}
+
+void motorForward(uint16_t torq) {
+  digitalWrite(DIR1, HIGH);
+  digitalWrite(DIR2, LOW);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, torq);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, torq);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+}
+
+void motorBack(uint16_t torq) {
+  digitalWrite(DIR1, LOW);
+  digitalWrite(DIR2, HIGH);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, torq);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, torq);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+}
+
+void motorLeft(uint16_t torq) {
+  digitalWrite(DIR1, LOW);
+  digitalWrite(DIR2, LOW);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, min(200, 2*torq));
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, min(200, 2*torq));
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+}
+
+void motorRight(uint16_t torq) {
+  digitalWrite(DIR1, HIGH);
+  digitalWrite(DIR2, HIGH);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH1, min(200, 2*torq));
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH1);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, CH2, min(200,2*torq));
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, CH2);
+}
 
 // ================== Hardware ==================
 Adafruit_BNO08x bno;
@@ -28,7 +98,6 @@ float rad2deg(float r)
 
 bool firstHeading = true;
 float headingBias = 0.0f;
-bool firstGPS = true;
 
 // ================ Noise Reduction ==================
 float deadband(float x, float th) 
@@ -137,7 +206,7 @@ double lat0_rad = 0.0, cos_lat0 = 1.0;
 float last_gps_x = 0;
 float last_gps_y = 0;
 const float gps_threshold = 0; // meters
-float theta_angle = 0, theta_bias = 1.4;
+float theta_angle = 0, theta_bias = 1.3f;
 float x_bias = 0, y_bias = 0;
 
 // quick and decent local meters conversion (ENU-ish)
@@ -199,31 +268,56 @@ static void ekf_build_h_H(const _float_t *x, _float_t *hx, _float_t *H)
   H[0*EKF_N + 0] = 1;
   H[1*EKF_N + 1] = 1;
 }
-uint16_t ack = 0;
-void printStateStdDevs() {
-  //Serial.println("State 1-sigma (sqrt of diag(P)):");
-  for (int i = 0; i < EKF_N; ++i) {
-    float sigma = sqrtf(ekf.P[i*EKF_N + i]);
-    //Serial.print("x["); Serial.print(i); Serial.print("] σ = ");
-    
-  while (!Serial.available() >= 2) {
-    // Block until something arrives
-  }
-  
-      Serial.readBytes((char*)&ack, sizeof(ack));
-      if (ack == 1) {
-        Serial.println(sigma, 6);
-        ack = 0;
-        delay(2);
-      }
-  }
-}
+
+/////////////////////////////////////////////////////          TIMERS            //////////////////////////////////////////////////////////////
+unsigned long lastIMU = 0, lastGPS = 0;
+float heading_deg = 0;
+//bool imuUpdated = false; Check line 392 \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
 void setup() {
   Serial.begin(115200);
   
   // Initialize Serial1 for the BNO08x (pins depend on your board!)
   Serial1.begin(3000000, SERIAL_8N1, BNO_RX, BNO_TX);  // most BNO085 boards default to 3Mbaud
+
+  pinMode(DIR1, OUTPUT);
+  pinMode(DIR2, OUTPUT);
+
+  // Configure PWM timer
+  ledc_timer_config_t ledc_timer = {
+      .speed_mode       = LEDC_HIGH_SPEED_MODE,
+      .duty_resolution  = RESOLUTION,
+      .timer_num        = TIMER,
+      .freq_hz          = FREQ,
+      .clk_cfg          = LEDC_AUTO_CLK
+  };
+  ledc_timer_config(&ledc_timer);
+
+  // Configure PWM channel 1
+  ledc_channel_config_t ch1 = {
+      .gpio_num   = PWM1,
+      .speed_mode = LEDC_HIGH_SPEED_MODE,
+      .channel    = CH1,
+      .intr_type  = LEDC_INTR_DISABLE,
+      .timer_sel  = TIMER,
+      .duty       = 0,
+      .hpoint     = 0
+  };
+  ledc_channel_config(&ch1);
+
+  // Configure PWM channel 2
+  ledc_channel_config_t ch2 = {
+      .gpio_num   = PWM2,
+      .speed_mode = LEDC_HIGH_SPEED_MODE,
+      .channel    = CH2,
+      .intr_type  = LEDC_INTR_DISABLE,
+      .timer_sel  = TIMER,
+      .duty       = 0,
+      .hpoint     = 0
+  };
+  ledc_channel_config(&ch2);
+
+  motorStop();
 
   if (!bno.begin_UART(&Serial1)) {
     Serial.println("Failed to find BNO08x chip over UART");
@@ -246,7 +340,7 @@ void setup() {
   Wire.begin(GPS_SDA, GPS_SCL);
   GPS.begin(0x10);
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 10 Hz update rate
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
   GPS.sendCommand(PGCMD_ANTENNA);
   delay(100);
   GPS.sendCommand("$PMTK386,0*23");           //Turn off static Nav
@@ -265,8 +359,8 @@ void setup() {
 
   // Power Spectral density
   measureAccelNoiseDensity(Serial, &S_x, &S_y, 2000, 0.01f);
-  S_x = 250*S_x;
-  S_y = 250*S_y;
+  S_x = 500*S_x;
+  S_y = 500*S_y;
 
   // Measurement noise R
   memset(R, 0, sizeof(R));
@@ -295,11 +389,14 @@ void loop() {
   if (dt <= 0) dt = 0.001f;
   last_ms = now;
 
-
+bool imuUpdated = false;
+if (millis() - lastIMU >= 10) {
+  
   // ---------- Read IMU ----------
   
   sh2_SensorValue_t sensorValue;
   float yaw;
+  
   if (bno.getSensorEvent(&sensorValue)) {    
     if (sensorValue.sensorId == SH2_ROTATION_VECTOR) {
 
@@ -320,10 +417,11 @@ void loop() {
 
       // Wrap to 0..360°
       yaw -= headingBias;
-      float heading_deg = fmodf(rad2deg(yaw) + 360.0f, 360.0f);
+      heading_deg = fmodf(rad2deg(yaw) + 360.0f, 360.0f);
 
       //Serial.print("Heading: "); Serial.println(heading_deg, 1);
-      delay(1);   //DO NOT REMOVE DELAY, OTHERWISE X DOES NOT PRINT
+      //delay(1);
+      yield();
       
     }
     if (sensorValue.sensorId == SH2_LINEAR_ACCELERATION) {
@@ -398,6 +496,9 @@ void loop() {
     }
     
   }
+  lastIMU = millis();
+  imuUpdated = true;
+}
 
 
   // ---------- GPS parsing ----------
@@ -413,6 +514,8 @@ void loop() {
       break;
     }
   }
+
+  if ((!imuUpdated) && (millis() - lastGPS >= 500)) {
 
   bool have_new_gps = false;
   if (GPS.newNMEAreceived()) {
@@ -433,99 +536,81 @@ void loop() {
   // ---------- Build measurement when we have GPS fix ----------
   
   if (GPS.fix && have_new_gps) {
-    //if (!firstGPS){
   
-      float gps_x_m = 0, gps_y_m = 0;
-      ll_to_local_m(GPS.latitudeDegrees, GPS.longitudeDegrees, gps_x_m, gps_y_m);
-      
-      if (!have_origin) {
-        x_bias = gps_x_m;
-        y_bias = gps_y_m;
-        have_origin = true;
-      }
+    float gps_x_m = 0, gps_y_m = 0;
+    ll_to_local_m(GPS.latitudeDegrees, GPS.longitudeDegrees, gps_x_m, gps_y_m);
     
-      gps_x_m = gps_x_m - x_bias;
-      gps_y_m = gps_y_m - y_bias;
-    
-      getTheta(gps_x_m, gps_y_m, &theta_angle);
-      float skuins = sqrtf(gps_x_m*gps_x_m + gps_y_m*gps_y_m);
-      gps_x_m = skuins*sinf(theta_angle-theta_bias);
-      gps_y_m = skuins*cosf(theta_angle-theta_bias);
+    if (!have_origin) {
+      x_bias = gps_x_m;
+      y_bias = gps_y_m;
+      have_origin = true;
+    }
   
-      // z = [gps_x, gps_y]
-      _float_t z[EKF_M];
-      if ((gps_x_m == gps_x_m) && (gps_y_m == gps_y_m)) {
-        z[0] = gps_x_m;
-        z[1] = gps_y_m;
-    
-        //Serial.print("-------------------gps_x_m:  "); Serial.print(gps_x_m,7);
-        //Serial.print("-------------------gps_y_m:  "); Serial.println(gps_y_m,7);
-    
-        // h(x) and H
-        _float_t hx[EKF_N];     // NOTE: tinyekf uses EKF_N for hx buffer size
-        _float_t H[EKF_M*EKF_N];
-        ekf_build_h_H(ekf.x, hx, H);
-    
-        // ---------- Update ----------
-        (void)ekf_update(&ekf, z, hx, H, R);
-      }
-    //}
-    //else {
-    //  firstGPS = false;
-    //}
+    gps_x_m = gps_x_m - x_bias;
+    gps_y_m = gps_y_m - y_bias;
+  
+    getTheta(gps_x_m, gps_y_m, &theta_angle);
+    float skuins = sqrtf(gps_x_m*gps_x_m + gps_y_m*gps_y_m);
+    gps_x_m = skuins*sinf(theta_angle-theta_bias);
+    gps_y_m = skuins*cosf(theta_angle-theta_bias);
+
+    // z = [gps_x, gps_y]
+    _float_t z[EKF_M];
+    if ((gps_x_m == gps_x_m) && (gps_y_m == gps_y_m)) {
+      z[0] = gps_x_m;
+      z[1] = gps_y_m;
+  
+      //Serial.print("-------------------gps_x_m:  "); Serial.print(gps_x_m,7);
+      //Serial.print("-------------------gps_y_m:  "); Serial.println(gps_y_m,7);
+  
+      // h(x) and H
+      _float_t hx[EKF_N];     // NOTE: tinyekf uses EKF_N for hx buffer size
+      _float_t H[EKF_M*EKF_N];
+      ekf_build_h_H(ekf.x, hx, H);
+  
+      // ---------- Update ----------
+      (void)ekf_update(&ekf, z, hx, H, R);
+    }
   }
 
-
+  lastGPS = millis();
+  }
 
   // ---------- Debug ----------
-  while (!Serial.available() >= 2) {
-    // Block until something arrives
-  }
-  
-    Serial.readBytes((char*)&ack, sizeof(ack));
-    if (ack == 1) {
-      //Serial.print("x: ");  
-      Serial.println(ekf.x[0], 3);
-      ack = 0;
-      delay(2);
+    while (!Serial.available() >= 6) {
+      // Block until something arrives
     }
 
-  while (!Serial.available() >= 2) {
-    // Block until something arrives
-  }
-  
-    Serial.readBytes((char*)&ack, sizeof(ack));
-    if (ack == 1) {
-      //Serial.print("y: ");  
-      Serial.println(ekf.x[1], 3);
-      ack = 0;
-      delay(2);
-    }
-  
-  while (!Serial.available() >= 2) {
-    // Block until something arrives
-  }
-  
-    Serial.readBytes((char*)&ack, sizeof(ack));
-    if (ack == 1) {
-      //Serial.print("  vx: ");  
-      Serial.println(ekf.x[2], 3);
-      ack = 0;
-      delay(2);
+    if (Serial.available() >= 6) { // 4 bytes float + 2 bytes short
+      Serial.readBytes((char*)&steering, sizeof(steering));
+      Serial.readBytes((char*)&power, sizeof(power));
+      
+      char message[36];
+      sprintf(message, "%06.2f%06.2f%06.2f%06.2f%04.0f%04hd%03.0f", ekf.x[0], ekf.x[1], ekf.x[2], ekf.x[3], steering, power, heading_deg);
+      Serial.println(message);
+      lastCommandTime = millis();
+      delay(10);
     }
 
-  while (!Serial.available() >= 2) {
-    // Block until something arrives
-  }
-  
-    Serial.readBytes((char*)&ack, sizeof(ack));
-    if (ack == 1) {
-      //Serial.print("  vy: ");  
-      Serial.println(ekf.x[3], 3);
-      ack = 0;
-      delay(2);
+    if (power > 0) {
+      if (steering < -40) {
+        motorLeft(abs(power));
+      }
+      else if (steering > 40) {
+        motorRight(abs(power));
+      }
+      else {
+        motorForward(abs(power));
+      }
     }
-  printStateStdDevs();
+    else if (power < 0) {
+      motorBack(abs(power));
+    }
+    else {
+      motorStop();
+    }
 
-  //delay(20); // ~50 Hz loop
+    if ((millis() - lastCommandTime) > COMMAND_TIMEOUT) {
+      motorStop();
+    }
 }
