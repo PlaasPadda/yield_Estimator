@@ -269,10 +269,7 @@ static void ekf_build_h_H(const _float_t *x, _float_t *hx, _float_t *H)
   H[1*EKF_N + 1] = 1;
 }
 
-/////////////////////////////////////////////////////          TIMERS            //////////////////////////////////////////////////////////////
-unsigned long lastIMU = 0, lastGPS = 0;
-float heading_deg = 0;
-//bool imuUpdated = false; Check line 392 \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
 
 void setup() {
   Serial.begin(115200);
@@ -359,8 +356,8 @@ void setup() {
 
   // Power Spectral density
   measureAccelNoiseDensity(Serial, &S_x, &S_y, 2000, 0.01f);
-  S_x = 0.0001f*S_x;
-  S_y = 0.0001f*S_y;
+  S_x = 1000*S_x;
+  S_y = 1000*S_y;
 
   // Measurement noise R
   memset(R, 0, sizeof(R));
@@ -381,6 +378,11 @@ void setup() {
     }
   }
 }
+
+/////////////////////////////////////////////////////          TIMERS            //////////////////////////////////////////////////////////////
+unsigned long lastIMU = 0, lastGPS = 0;
+float heading_deg = 0;
+//bool imuUpdated = false; Check line 392 \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
 void loop() {
 
@@ -533,14 +535,14 @@ if (millis() - lastIMU >= 10) {
 //    }
 //  }
 
-  if ((!imuUpdated) && (millis() - lastGPS >= 500)) {
+  if ((millis() - lastGPS >= 200)) {
 
   bool have_new_gps = false;
   if (GPS.newNMEAreceived()) {
     have_new_gps = true;
 
     if (!GPS.parse(GPS.lastNMEA())) {
-//        Serial.println("GPS parse failed"); /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //Serial.println("GPS parse failed"); /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         return;  // Skip update on parse error
       }
 
@@ -553,7 +555,7 @@ if (millis() - lastIMU >= 10) {
     float gps_x_m = 0, gps_y_m = 0;
     ll_to_local_m(GPS.latitudeDegrees, GPS.longitudeDegrees, gps_x_m, gps_y_m);
 
-    if (!isfinite(gps_x_m) || !isfinite(gps_y_m)) {
+    if (isnan(gps_x_m) || isnan(gps_y_m)) {
       //Serial.println("GPS coords NaN after ll_to_local_m"); ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       lastGPS = millis();
       return;
@@ -581,7 +583,7 @@ if (millis() - lastIMU >= 10) {
 
     // z = [gps_x, gps_y]
     _float_t z[EKF_M];
-    if (isfinite(gps_x_m) && isfinite(gps_y_m)) {
+    if (!isnan(gps_x_m) && !isnan(gps_y_m)) {
       z[0] = gps_x_m;
       z[1] = gps_y_m;
   
