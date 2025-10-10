@@ -359,8 +359,8 @@ void setup() {
 
   // Power Spectral density
   measureAccelNoiseDensity(Serial, &S_x, &S_y, 2000, 0.01f);
-  S_x = 500*S_x;
-  S_y = 500*S_y;
+  S_x = 0.0001f*S_x;
+  S_y = 0.0001f*S_y;
 
   // Measurement noise R
   memset(R, 0, sizeof(R));
@@ -383,6 +383,17 @@ void setup() {
 }
 
 void loop() {
+
+  unsigned long loopStart = micros();
+  
+  int maxChars = 100; 
+  int charsRead = 0;
+  while (GPS.available() && charsRead < maxChars) {
+    GPS.read();
+    charsRead++;
+  }
+
+  
   // ---------- Time step ----------
   unsigned long now = millis();
   float dt = (now - last_ms) * 0.001f;
@@ -396,8 +407,10 @@ if (millis() - lastIMU >= 10) {
   
   sh2_SensorValue_t sensorValue;
   float yaw;
+  bool gotRotation = false;
+  bool gotAccel = false;
   
-  if (bno.getSensorEvent(&sensorValue)) {    
+  while (bno.getSensorEvent(&sensorValue)) {    
     if (sensorValue.sensorId == SH2_ROTATION_VECTOR) {
 
       // Quaternion (w,x,y,z)
@@ -421,11 +434,11 @@ if (millis() - lastIMU >= 10) {
 
       //Serial.print("Heading: "); Serial.println(heading_deg, 1);
       //delay(1);
-      yield();
+      //yield();
+      gotRotation = true;
       
     }
-    if (sensorValue.sensorId == SH2_LINEAR_ACCELERATION) {
-      delay(10);
+    else if (sensorValue.sensorId == SH2_LINEAR_ACCELERATION) {
       float ax = deadband(sensorValue.un.linearAcceleration.x, 0.05f);
       float ay = deadband(sensorValue.un.linearAcceleration.y, 0.05f);
       float az = deadband(sensorValue.un.linearAcceleration.z, 0.05f);
@@ -493,6 +506,11 @@ if (millis() - lastIMU >= 10) {
     
       // ---------- Predict ----------
       ekf_predict(&ekf, fx, F, Qscaled);
+      gotAccel = true;
+    }
+
+    if (gotAccel && gotRotation){
+      break;
     }
     
   }
@@ -520,17 +538,12 @@ if (millis() - lastIMU >= 10) {
   bool have_new_gps = false;
   if (GPS.newNMEAreceived()) {
     have_new_gps = true;
-    // a tricky thing here is if we print the NMEA sentence, or data
-    // we end up not listening and catching other sentences!
-    // so be very wary if using OUTPUT_ALLDATA and trying to print out data
-    //Serial.println(GPS.lastNMEA()); // this also sets the newNMEAreceived() flag to false
-    if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
-      return; // we can fail to parse a sentence in which case we should just wait for another
-      
-    //Serial.print("GPS UTC seconds: ");
-    //Serial.println(GPS.seconds);
-    //Serial.print("Millis: ");
-    //Serial.println(millis());
+
+    if (!GPS.parse(GPS.lastNMEA())) {
+//        Serial.println("GPS parse failed"); /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        return;  // Skip update on parse error
+      }
+
   }
 
   // ---------- Build measurement when we have GPS fix ----------
@@ -539,6 +552,12 @@ if (millis() - lastIMU >= 10) {
   
     float gps_x_m = 0, gps_y_m = 0;
     ll_to_local_m(GPS.latitudeDegrees, GPS.longitudeDegrees, gps_x_m, gps_y_m);
+
+    if (!isfinite(gps_x_m) || !isfinite(gps_y_m)) {
+      //Serial.println("GPS coords NaN after ll_to_local_m"); ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      lastGPS = millis();
+      return;
+    }
     
     if (!have_origin) {
       x_bias = gps_x_m;
@@ -554,11 +573,11 @@ if (millis() - lastIMU >= 10) {
     gps_x_m = skuins*sinf(theta_angle-theta_bias);
     gps_y_m = skuins*cosf(theta_angle-theta_bias);
 
-    Serial.print("GPS Fix: "); Serial.println(GPS.fix);
-    Serial.print("Lat: "); Serial.print(GPS.latitudeDegrees, 7);
-    Serial.print("  Lon: "); Serial.println(GPS.longitudeDegrees, 7);
-    Serial.print("gps_x_m: "); Serial.print(gps_x_m, 7);
-    Serial.print("  gps_y_m: "); Serial.println(gps_y_m, 7);
+//    Serial.print("GPS Fix: "); Serial.println(GPS.fix);  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//    Serial.print("Lat: "); Serial.print(GPS.latitudeDegrees, 7);
+//    Serial.print("  Lon: "); Serial.println(GPS.longitudeDegrees, 7);
+//    Serial.print("gps_x_m: "); Serial.print(gps_x_m, 7);
+//    Serial.print("  gps_y_m: "); Serial.println(gps_y_m, 7);
 
     // z = [gps_x, gps_y]
     _float_t z[EKF_M];
@@ -578,7 +597,7 @@ if (millis() - lastIMU >= 10) {
       (void)ekf_update(&ekf, z, hx, H, R);
     }
     else{
-          Serial.println("GPS printed NaN");
+          //Serial.println("GPS printed NaN");  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     }
   }
 
@@ -622,4 +641,6 @@ if (millis() - lastIMU >= 10) {
     if ((millis() - lastCommandTime) > COMMAND_TIMEOUT) {
       motorStop();
     }
+
+    //Serial.printf("Loop time: %lu us\n", micros() - loopStart); //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 }
