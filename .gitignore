@@ -8,3 +8,6 @@
 
 # Ignore images
 *.jpg
+
+# Ignore CSV
+*.csv

@@ -4,7 +4,7 @@ import struct
 import numpy as np
 import matplotlib.pyplot as plt 
 
-LOOP_LEN = 200 
+LOOP_LEN = 300 
 
 def read_next_value(tag, i, arr):
     while True:
