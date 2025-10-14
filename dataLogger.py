@@ -26,7 +26,7 @@ TARGETS         = [0]
 INPUT_DEVIDER   = pow(2,15)
 ACK             = struct.pack('<H', 1)
 
-TREEAMOUNTX = 2 
+TREEAMOUNTX = 10 
 TREEAMOUNTY = 7 
 
 TREEDISTANCE = 1.5 # y distance between trees in a row (in meters)
@@ -298,6 +298,8 @@ if __name__=='__main__':
 
     ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=5)
 
+    heading_arr = np.array([])
+
     tree_list = []
     topleftx = (-HALFTREEAREA - 0.5*ROVERWIDTH) - (ROADWIDTH + (2*HALFTREEAREA))
     toplefty = (TREEDISTANCE) - TREEDISTANCE
@@ -426,6 +428,8 @@ if __name__=='__main__':
         controller.updateControl(Window = window, Strstren=strstren, Torq=torq)
         plotter.updateValues(X=x, Y=y, XV=xv, YV=yv, IMUx=imux, IMUy=imuy, GPSx=gpsx, GPSy=gpsy)
 
+        heading_arr = np.append(heading_arr, head)
+
         if (x > (lastArea[0]+(ROADWIDTH + (2*HALFTREEAREA)))): # If moved one block right
             treeBlock = treeBlock + TREEAMOUNTY 
             lastArea = (lastArea[0]+(ROADWIDTH + (2*HALFTREEAREA)), lastArea[1])
@@ -511,6 +515,7 @@ if __name__=='__main__':
         "EKF_y": y_arr,
         "ax": IMUX,
         "ay": IMUY,
+        "Heading": heading_arr,
         "GPS_X": GPSX, 
         "GPS_y": GPSY 
     })
