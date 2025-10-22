@@ -375,6 +375,7 @@ void setup() {
       break;
     }
   }
+    Serial.println("Flushed");
 }
 
 /////////////////////////////////////////////////////          TIMERS            //////////////////////////////////////////////////////////////
@@ -388,8 +389,9 @@ void loop() {
 
   unsigned long loopStart = micros();
   
-  int maxChars = 100; 
+  int maxChars = 1;
   int charsRead = 0;
+  
   while (GPS.available() && charsRead < maxChars) {
     GPS.read();
     charsRead++;
@@ -613,9 +615,9 @@ if (millis() - lastIMU >= 10) {
   }
 
   // ---------- Debug ----------
-    while (!Serial.available() >= 6) {
-      // Block until something arrives
-    }
+//    while (!Serial.available() >= 6) {
+//      // Block until something arrives
+//    }
 
     if (Serial.available() >= 6) { // 4 bytes float + 2 bytes short
       Serial.readBytes((char*)&steering, sizeof(steering));

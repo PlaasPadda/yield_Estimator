@@ -17,25 +17,27 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Wedge, Rectangle
 import random
 import time
+from datetime import datetime
+import pandas as pd
 
 #---------------------------------------CONSTANTS-------------------------------
 # Define target object as apples
-TARGETS         = [0]
+TARGETS         = [1]
 INPUT_DEVIDER   = pow(2,15)
 ACK             = struct.pack('<H', 1)
 
-TREEAMOUNTX = 5 
-TREEAMOUNTY = 7 
+TREEAMOUNTX = 3 
+TREEAMOUNTY = 6 
 
-TREEDISTANCE = 1.5 # y distance between trees in a row (in meters)
+TREEDISTANCE = 2 # y distance between trees in a row (in meters)
 HALFTREEAREA = 0.5 # half the length of a tree block (in meters)
-ROADWIDTH = 4.5 # width of space between tree blocks (in meters)
-ROVERWIDTH = 1 # width of rover (in meters)
+ROADWIDTH = 4 # width of space between tree blocks (in meters)
+ROVERWIDTH = 2 # width of rover (in meters)
 
-LIGHTGREEN_THRESH = 4 
-YELLOW_THRESH = 3 
-ORANGE_THRESH = 2
-RED_THRESH = 1
+LIGHTGREEN_THRESH = 60 
+YELLOW_THRESH = 40 
+ORANGE_THRESH = 20 
+RED_THRESH = 10
 #--------------------------------------Classes----------------------------------
 class Controller():
     def __init__(self):
@@ -138,6 +140,10 @@ class Plotter():
     def __init__(self, Window):
         self.x_pos_arr = np.array([])
         self.y_pos_arr = np.array([])
+        self.IMU_x_arr = np.array([])
+        self.IMU_y_arr = np.array([])
+        self.GPS_x_arr = np.array([])
+        self.GPS_y_arr = np.array([])
         self.x_vel = 0 
         self.y_vel = 0 
         
@@ -149,15 +155,20 @@ class Plotter():
         self.figure_canvas_agg.draw()
         self.figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
 
-    def updateValues(self, X, Y, XV, YV):
+    def updateValues(self, X, Y, XV, YV, IMUx, IMUy, GPSx, GPSy):
         self.x_pos_arr = np.append(self.x_pos_arr, X)
         self.y_pos_arr = np.append(self.y_pos_arr, Y)
+        self.IMU_x_arr = np.append(self.IMU_x_arr, IMUx)
+        self.IMU_y_arr = np.append(self.IMU_y_arr, IMUy)
+        self.GPS_x_arr = np.append(self.GPS_x_arr, GPSx)
+        self.GPS_y_arr = np.append(self.GPS_y_arr, GPSy)
         self.x_vel = XV 
         self.y_vel = YV
 
     def updateCanvas(self):
         self.ax.cla() #Clear plot
         self.ax.plot(self.x_pos_arr, self.y_pos_arr, color="cyan", linewidth=3)
+        self.ax.scatter(self.GPS_x_arr, self.GPS_y_arr, color="purple", linewidth=0.5)
         self.ax.set_xlabel("X position (m)") 
         self.ax.set_ylabel("Y position (m)") 
         self.ax.set_xlim(-40,40)
@@ -169,7 +180,7 @@ class Plotter():
         #print(self.y_pos_arr)
 
     def giveRoute(self):
-        return self.x_pos_arr, self.y_pos_arr
+        return self.x_pos_arr, self.y_pos_arr, self.IMU_x_arr, self.IMU_y_arr, self.GPS_x_arr, self.GPS_y_arr
 
 class Boom():
     def __init__(self, TLx, TLy, BRx, BRy):
@@ -272,16 +283,22 @@ def read_values(ser):
                 steerStren = int(line[24:28])
                 torque = int(line[28:32])
                 heading = int(line[32:35])
+                IMU_x = float(line[35:40])
+                IMU_y = float(line[40:45])
+                GPS_x = float(line[45:48])
+                GPS_y = float(line[48:51])
                 break  # only exit once we got it
             except ValueError:
                 print(f"Skipped bad line: {line}")
 
-    return x_pos, y_pos, x_vel, y_vel, steerStren, torque, heading
+    return x_pos, y_pos, x_vel, y_vel, steerStren, torque, heading, IMU_x, IMU_y, GPS_x, GPS_y
 
 #----------------------------------MAIN---------------------------------------
 if __name__=='__main__':
 
     ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=5)
+
+    heading_arr = np.array([])
 
     tree_list = []
     topleftx = (-HALFTREEAREA - 0.5*ROVERWIDTH) - (ROADWIDTH + (2*HALFTREEAREA))
@@ -322,9 +339,9 @@ if __name__=='__main__':
         print("Using device:", device)
 
     cam = cv2.VideoCapture(0)
-    #model = YOLO("yolov8m_appleset.pt")
+    model = YOLO("yolov8m_appleset.pt")
     #model = YOLO("yolo11m.pt")
-    model = YOLO("yolov8m_Orchard.pt")
+    #model = YOLO("yolov8m_Orchard.pt")
 
     
     # Get the default frame width and height
@@ -354,6 +371,9 @@ if __name__=='__main__':
     framecount = 0
     lastArea = ((-HALFTREEAREA - 0.5*ROVERWIDTH), 0) 
 
+    # Open Video
+    cap = cv2.VideoCapture("/home/plaaspadda/Videos/TrimmedTestVideo (online-video-cutter.com).mp4")
+
     #Start Timer
     start_time = time.time()
     loopCounter = 0
@@ -368,12 +388,17 @@ if __name__=='__main__':
         loopCounter += 1
     
         #Read from camera
-        returned, frame = cam.read()
+        #returned, frame = cam.read()
 
         # Get detection results from yolo and bytetrack
-        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=True, save=False)
+        ret, frame = cap.read()
+        if not ret:   # video is finished
+            break
 
-        #results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False, classes=[47])
+        # Get detection results from yolo and bytetrack
+        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False)
+
+        #results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=True, save=False, classes=[47])
 
         # Detect if desired objects are within frame
         count = appleCounter.detectObjects(yoloFrame=results, targets=TARGETS, Window=window)
@@ -381,7 +406,7 @@ if __name__=='__main__':
         framecount += 1 
 
         # After every 120 frames, refresh ID list
-        if (framecount>120):
+        if (framecount>30):
             if not (results[0].boxes.id == None):
                 appleCounter.refreshIDList(yoloFrame=results)
                 framecount = 0
@@ -402,14 +427,16 @@ if __name__=='__main__':
         
         controller.sendControl()
 
-        x, y, xv, yv, strstren, torq, head = read_values(ser) 
+        x, y, xv, yv, strstren, torq, head, imux, imuy, gpsx, gpsy = read_values(ser) 
         
         window['XVEL'].update(xv)
         window['YVEL'].update(yv)
         window['HEADING'].update(head)
 
         controller.updateControl(Window = window, Strstren=strstren, Torq=torq)
-        plotter.updateValues(X=x, Y=y, XV=xv, YV=yv)
+        plotter.updateValues(X=x, Y=y, XV=xv, YV=yv, IMUx=imux, IMUy=imuy, GPSx=gpsx, GPSy=gpsy)
+
+        heading_arr = np.append(heading_arr, head)
 
         if (x > (lastArea[0]+(ROADWIDTH + (2*HALFTREEAREA)))): # If moved one block right
             treeBlock = treeBlock + TREEAMOUNTY 
@@ -442,6 +469,8 @@ if __name__=='__main__':
     fps = loopCounter / (end_time - start_time)
     print("Frames Per Second: ", fps)
 
+
+
     # set up plot parameters 
     fig, ax = plt.subplots()
     radius = 0.8 * (HALFTREEAREA) 
@@ -462,8 +491,9 @@ if __name__=='__main__':
         ax.add_patch(rightWedge)
 
     #Plot route
-    x_arr, y_arr = plotter.giveRoute() 
+    x_arr, y_arr, IMUX, IMUY, GPSX, GPSY = plotter.giveRoute() 
     ax.plot(x_arr, y_arr, color="cyan", linewidth=3)
+    ax.scatter(GPSX, GPSY, color="purple", linewidth=0.5)
 
     # Set axis limits so wedges are visible
     #ax.set_xlim(-2, 6.5)
@@ -486,6 +516,23 @@ if __name__=='__main__':
     figure_canvas_agg.draw()
     figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
     print('Done')
+
+    # print kalman, IMU and GPS values to csv
+    df = pd.DataFrame({
+        "EKF_x": x_arr,
+        "EKF_y": y_arr,
+        "ax": IMUX,
+        "ay": IMUY,
+        "Heading": heading_arr,
+        "GPS_X": GPSX, 
+        "GPS_y": GPSY 
+    })
+
+    # Write the DataFrame to a CSV file
+    # index=False prevents Pandas from writing the DataFrame index as a column in the CSV
+    df.to_csv(f"sensor_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
+
+    print("CSV file created successfully.")
 
     while True:
         event,value = window.read(timeout=1)

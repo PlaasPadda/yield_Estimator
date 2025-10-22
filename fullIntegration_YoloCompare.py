@@ -380,7 +380,7 @@ if __name__=='__main__':
         #if not ret:   # video is finished
         #    break
 
-        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False)
+        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=True)
 
         # Detect if desired objects are within frame
         count = appleCounter.detectObjects(yoloFrame=results, targets=TARGETS, Window=window)

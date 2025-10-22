@@ -206,7 +206,7 @@ double lat0_rad = 0.0, cos_lat0 = 1.0;
 float last_gps_x = 0;
 float last_gps_y = 0;
 const float gps_threshold = 0; // meters
-float theta_angle = 0, theta_bias = 1.3f;
+float theta_angle = 0, theta_bias = -0.4f;
 float x_bias = 0, y_bias = 0;
 
 // quick and decent local meters conversion (ENU-ish)

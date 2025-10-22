@@ -6,10 +6,10 @@ import FreeSimpleGUI as sg
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import random
 
-TREEAMOUNTX = 5 
-TREEAMOUNTY = 3 
+TREEAMOUNTX = 1 
+TREEAMOUNTY = 1 
 
-TREEDISTANCE = 4 # y distance between trees in a row (in meters)
+TREEDISTANCE = 3 # y distance between trees in a row (in meters)
 HALFTREEAREA = 0.8 # half the length of a tree block (in meters)
 ROADWIDTH = 2 # width of space between tree blocks (in meters)
 ROVERWIDTH = 1 # width of rover (in meters)
@@ -28,12 +28,14 @@ class Boom():
 
         self.treeLeftPos = (TLx, BRy+center) 
         #self.treeLeftCount = 0
-        self.treeLeftCount = random.randint(0, 150)
+        #self.treeLeftCount = random.randint(0, 150)
+        self.treeLeftCount = 80 
 
 
         self.treeRightpos = (BRx, BRy+center)
         #self.treeRightCount = 0
-        self.treeRightCount = random.randint(0, 150)
+        #self.treeRightCount = random.randint(0, 150)
+        self.treeRightCount = 80 
 
     def inArea(self, RoverX, RoverY):
         if (self.topLeft[0] < RoverX) and (RoverX < self.bottomRight[0]):
@@ -137,8 +139,8 @@ if __name__=='__main__':
         ax.add_patch(rightWedge)
 
     # Set axis limits so wedges are visible
-    ax.set_xlim(-2, 21)
-    ax.set_ylim(-1, 11)
+    ax.set_xlim(-2, 5)
+    ax.set_ylim(-1, 5)
     ax.set_aspect('equal')
     ax.set_facecolor("darkseagreen")
 

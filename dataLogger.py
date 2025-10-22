@@ -22,17 +22,17 @@ import pandas as pd
 
 #---------------------------------------CONSTANTS-------------------------------
 # Define target object as apples
-TARGETS         = [0]
+TARGETS         = [47]
 INPUT_DEVIDER   = pow(2,15)
 ACK             = struct.pack('<H', 1)
 
-TREEAMOUNTX = 10 
-TREEAMOUNTY = 7 
+TREEAMOUNTX = 3 
+TREEAMOUNTY = 6 
 
-TREEDISTANCE = 1.5 # y distance between trees in a row (in meters)
-HALFTREEAREA = 0.3 # half the length of a tree block (in meters)
-ROADWIDTH = 3 # width of space between tree blocks (in meters)
-ROVERWIDTH = 0.7 # width of rover (in meters)
+TREEDISTANCE = 2 # y distance between trees in a row (in meters)
+HALFTREEAREA = 0.5 # half the length of a tree block (in meters)
+ROADWIDTH = 4 # width of space between tree blocks (in meters)
+ROVERWIDTH = 2 # width of rover (in meters)
 
 LIGHTGREEN_THRESH = 4 
 YELLOW_THRESH = 3 
@@ -168,7 +168,7 @@ class Plotter():
     def updateCanvas(self):
         self.ax.cla() #Clear plot
         self.ax.plot(self.x_pos_arr, self.y_pos_arr, color="cyan", linewidth=3)
-        self.ax.plot(self.GPS_x_arr, self.GPS_y_arr, color="purple", linewidth=2)
+        self.ax.scatter(self.GPS_x_arr, self.GPS_y_arr, color="purple", linewidth=0.5)
         self.ax.set_xlabel("X position (m)") 
         self.ax.set_ylabel("Y position (m)") 
         self.ax.set_xlim(-40,40)
@@ -340,8 +340,8 @@ if __name__=='__main__':
 
     cam = cv2.VideoCapture(0)
     #model = YOLO("yolov8m_appleset.pt")
-    #model = YOLO("yolo11m.pt")
-    model = YOLO("yolov8m_Orchard.pt")
+    model = YOLO("yolo11m.pt")
+    #model = YOLO("yolov8m_Orchard.pt")
 
     
     # Get the default frame width and height
@@ -388,9 +388,9 @@ if __name__=='__main__':
         returned, frame = cam.read()
 
         # Get detection results from yolo and bytetrack
-        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=True, save=False)
+        #results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False)
 
-        #results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False, classes=[47])
+        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=True, save=False, classes=[47])
 
         # Detect if desired objects are within frame
         count = appleCounter.detectObjects(yoloFrame=results, targets=TARGETS, Window=window)
@@ -485,7 +485,7 @@ if __name__=='__main__':
     #Plot route
     x_arr, y_arr, IMUX, IMUY, GPSX, GPSY = plotter.giveRoute() 
     ax.plot(x_arr, y_arr, color="cyan", linewidth=3)
-    ax.plot(GPSX, GPSY, color="purple", linewidth=2)
+    ax.scatter(GPSX, GPSY, color="purple", linewidth=0.5)
 
     # Set axis limits so wedges are visible
     #ax.set_xlim(-2, 6.5)
