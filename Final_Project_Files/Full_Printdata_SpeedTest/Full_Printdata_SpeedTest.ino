@@ -648,7 +648,7 @@ if (millis() - lastIMU >= 10) {
 
     
     //Limit loop to 30Hz
-   while !((micros() - loopStart) > 33000){
+   while (!((micros() - loopStart) > 33000)){
     
    }
     //Serial.printf("Loop time: %lu us\n", micros() - loopStart); //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

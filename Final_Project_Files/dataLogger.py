@@ -22,7 +22,7 @@ import pandas as pd
 
 #---------------------------------------CONSTANTS-------------------------------
 # Define target object as apples
-TARGETS         = [1]
+TARGETS         = [47]
 INPUT_DEVIDER   = pow(2,15)
 ACK             = struct.pack('<H', 1)
 
@@ -211,7 +211,7 @@ class Boom():
         # Under assumption that camera points right
         if (150 <= Heading) and (Heading <= 210):    
             self.treeLeftCount = self.treeLeftCount + Count  
-        else if ((330 <= Heading) or (Heading <= 30)):
+        elif ((330 <= Heading) or (Heading <= 30)):
             self.treeRightCount = self.treeRightCount + Count
 
     def givePlots(self):
@@ -336,8 +336,8 @@ if __name__=='__main__':
         print("Using device:", device)
 
     cam = cv2.VideoCapture(0)
-    model = YOLO("yolov8m_appleset.pt")
-    #model = YOLO("yolo11m.pt")
+    #model = YOLO("yolov8m_appleset.pt")
+    model = YOLO("yolo11m.pt")
     #model = YOLO("yolov8m_Orchard.pt")
 
     
@@ -385,9 +385,9 @@ if __name__=='__main__':
         returned, frame = cam.read()
 
         # Get detection results from yolo and bytetrack
-        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False)
+        #results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=False, save=False)
 
-        #results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=True, save=False, classes=[47])
+        results = model.track(frame, persist=True, show=False, tracker="bytetrack.yaml", show_labels=True, show_conf=True, save=False, classes=[47])
 
         # Detect if desired objects are within frame
         count = appleCounter.detectObjects(yoloFrame=results, targets=TARGETS, Window=window)

@@ -211,7 +211,7 @@ class Boom():
         # Under assumption that camera points right
         if (150 <= Heading) and (Heading <= 210):    
             self.treeLeftCount = self.treeLeftCount + Count  
-        else if ((330 <= Heading) or (Heading <= 30)):
+        elif ((330 <= Heading) or (Heading <= 30)):
             self.treeRightCount = self.treeRightCount + Count
 
     def givePlots(self):
